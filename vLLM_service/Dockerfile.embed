@@ -1,0 +1,11 @@
+# Servidor de embeddings para GPUs antiguas (sm < 70, ej. Quadro K2200 sm_52).
+# infinity-emb corre sobre PyTorch puro, compatible con Maxwell (sm_52) y superior.
+# PyTorch 2.4 + CUDA 12.1 soporta compute capability >= 5.0.
+FROM pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir "infinity-emb[torch,server]>=0.0.55"
+
+ENTRYPOINT ["infinity_emb"]
+

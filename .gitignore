@@ -223,3 +223,5 @@ _docs/
 z1.py
 z2.py
 z3.py
+.logs/
+metrics/
