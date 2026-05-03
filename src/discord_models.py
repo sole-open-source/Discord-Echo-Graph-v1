@@ -166,6 +166,83 @@ class LightRagDocs(Base):
     lightrag_track_id = Column(String(255), nullable=True, index=True)
 
 
+# CREATE TABLE discord_message_extraction_log (
+#     id SERIAL PRIMARY KEY,
+#     channel_id BIGINT NOT NULL REFERENCES discord_channels(id),
+#     messages_extracted INTEGER NOT NULL,
+#     extracted_at TIMESTAMP DEFAULT now()
+# );
+# CREATE INDEX ix_discord_message_extraction_log_channel_id ON discord_message_extraction_log (channel_id);
+# CREATE INDEX ix_discord_message_extraction_log_extracted_at ON discord_message_extraction_log (extracted_at);
+
+
+# CREATE TABLE discord_message_extraction_log (
+#     id SERIAL PRIMARY KEY,
+#     channel_id BIGINT NOT NULL REFERENCES discord_channels(id),
+#     messages_extracted INTEGER NOT NULL,
+#     extracted_at TIMESTAMP DEFAULT now()
+# );
+# CREATE INDEX ix_discord_message_extraction_log_channel_id ON discord_message_extraction_log (channel_id);
+# CREATE INDEX ix_discord_message_extraction_log_extracted_at ON discord_message_extraction_log (extracted_at);
+class DiscordMessageExtractionLog(Base):
+    __tablename__ = "discord_message_extraction_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    channel_id = Column(BigInteger, ForeignKey("discord_channels.id"), index=True, nullable=False)
+    messages_extracted = Column(Integer, nullable=False)
+    extracted_at = Column(DateTime, server_default=func.now(), index=True)
+
+
+
+
+
+
+
+# CREATE TABLE lightrag_format_error (
+#     id SERIAL PRIMARY KEY,
+#     timestamp TIMESTAMP NOT NULL NOW(),
+#     chunk_id VARCHAR(255) NOT NULL,
+#     tipo VARCHAR(50) NOT NULL,
+#     nombre TEXT NOT NULL,
+#     campos_encontrados INTEGER NOT NULL,
+#     campos_esperados INTEGER NOT NULL
+# );
+# CREATE INDEX ix_lightrag_format_error_timestamp ON lightrag_format_error (timestamp);
+# CREATE INDEX ix_lightrag_format_error_chunk_id ON lightrag_format_error (chunk_id);
+class LightragFormatError(Base):
+    __tablename__ = "lightrag_format_error"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, nullable=False, server_default=func.now(), index=True)
+    chunk_id = Column(String(255), nullable=False, index=True)
+    tipo = Column(String(50), nullable=False)
+    nombre = Column(Text, nullable=False)
+    campos_encontrados = Column(Integer, nullable=False)
+    campos_esperados = Column(Integer, nullable=False)
+
+
+
+# CREATE TABLE lightrag_token_usage (
+#     id SERIAL PRIMARY KEY,
+#     timestamp TIMESTAMP NOT NULL NOW(),
+#     model VARCHAR(100) NOT NULL,
+#     prompt_tokens INTEGER NOT NULL,
+#     completion_tokens INTEGER NOT NULL,
+#     total_tokens INTEGER NOT NULL
+# );
+# CREATE INDEX ix_lightrag_token_usage_timestamp ON lightrag_token_usage (timestamp);
+# CREATE INDEX ix_lightrag_token_usage_model ON lightrag_token_usage (model);
+class LightragTokenUsage(Base):
+    __tablename__ = "lightrag_token_usage"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, nullable=False, server_default=func.now(), index=True)
+    model = Column(String(100), nullable=False, index=True)
+    prompt_tokens = Column(Integer, nullable=False)
+    completion_tokens = Column(Integer, nullable=False)
+    total_tokens = Column(Integer, nullable=False)
+
+
 
 
 

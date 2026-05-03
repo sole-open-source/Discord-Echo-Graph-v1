@@ -19,7 +19,7 @@ def prune_in_lightrag_status_from_summaries(session : Session):
         dmodels.DiscordChannelChronologicalSummary.summary.is_(None),
     ).all()
 
-    if summary_records is None:
+    if not summary_records:
         print("No hay registros en summary_records")
         return None
 
@@ -40,7 +40,7 @@ def partition_summary(session : Session, max_msg : int = 100):
         dmodels.DiscordChannelChronologicalSummary.status == None
     ).all()
 
-    if summary_records is None:
+    if not summary_records:
         print("summary_records es None")
         return None
 
@@ -104,7 +104,7 @@ if __name__ == "__main__":
 
 
 
-    prune_in_lightrag_status_from_summaries(session=session)
+    # prune_in_lightrag_status_from_summaries(session=session)
 
     # ========================================================
     # ========================================================
@@ -148,12 +148,12 @@ if __name__ == "__main__":
     # ========================================================
     # ========================================================
 
-    # pendingtracks = get_pending_track_ids(session=session)
-    # lightrag_track_ids = pendingtracks.get("lightrag_track_ids")
-    # print(f"lightrag_track_ids: {len(lightrag_track_ids)}")
+    pendingtracks = get_pending_track_ids(session=session)
+    lightrag_track_ids = pendingtracks.get("lightrag_track_ids")
+    print(f"lightrag_track_ids: {len(lightrag_track_ids)}")
 
 
-    # sync_processed_lightrag_docs(session=session, pendingtracks=pendingtracks)
+    sync_processed_lightrag_docs(session=session, pendingtracks=pendingtracks)
 
 
     # ========================================================

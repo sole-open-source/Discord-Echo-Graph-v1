@@ -18,7 +18,7 @@ logger = get_logger(module_name="run_chat_api", DIR="apiv2")
 
 router = APIRouter(prefix="/educhat")
 
-engine = create_engine(settings.DB_NAME_EDUCHAT)
+engine = create_engine(settings.DB_EDUCHAT_CONN_STRING)
 MySession = sessionmaker(bind=engine)
 
 llm = ChatGroq(

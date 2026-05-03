@@ -310,6 +310,14 @@ class DiscordEchoSaverBot(discord.Client):
             session.commit()
             logger.info(f"'{channel.name}': {count} mensajes nuevos guardados.")
 
+            if count > 0:
+                log = models.DiscordMessageExtractionLog(
+                    channel_id=channel.id,
+                    messages_extracted=count,
+                )
+                session.add(log)
+                session.commit()
+
             if latest_timestamp:
                 channel_record.last_messages_at = latest_timestamp
                 session.commit()

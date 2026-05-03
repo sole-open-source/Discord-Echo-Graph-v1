@@ -148,7 +148,7 @@ def save_chunked_messages_by_channel(session : Session, channel_id : int, summar
     print(f"[save] Registros existentes en DB: {len(summary_records)}")
 
     # Caso 1
-    if (summary_records is None):
+    if not summary_records:
         print("[save] Caso 1: sin registros previos → insertando todos los chunks")
         for summ_dict in summary_list:
             record = models.DiscordChannelChronologicalSummary(

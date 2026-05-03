@@ -45,7 +45,7 @@ def delete_in_lightrag_status(session: Session, summary_ids: List[int]):
         models.LightRagDocs.summary_id.in_(summary_ids_set)
     ).all()
 
-    if records is None:                                                                                                                                                                
+    if not records:                                                                                                                                                                
         logger.info(f"No hay registros en LightRagDocs que su status sea in_lightrag y su summary sea vacio")
         return None
                                                                                                                                                                                     
