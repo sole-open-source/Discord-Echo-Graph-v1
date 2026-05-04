@@ -1,9 +1,9 @@
 services:
   lightrag:
     container_name: lightrag
-    image: lightrag-custom:latest
+    #image: lightrag-custom:latest
     # En el server remoto
-    #image: somath/lightrag-custom:latest 
+    image: somath/lightrag-custom:latest 
     # build:
     #   context: .
     #   dockerfile: Dockerfile.custom
