@@ -122,7 +122,7 @@ async def start_chat(ctx: commands.Context):
         await ctx.reply("Ya tienes una sesión activa. Escribe `!end` para terminarla antes de iniciar una nueva.")
         return
 
-    engine = create_engine(settings.CHAT_DB_APP_CONN_STRING)
+    engine = create_engine(settings.DB_EDUCHAT_CONN_STRING)
     MySession = sessionmaker(bind=engine)
     session = MySession()
     try:
@@ -222,7 +222,7 @@ if __name__ == "__main__":
 
 """
 
-python3 -m src.services.v2.botv2
+python3 -m src.services.v1.ChatEdubot.educhat
 
 
  Comandos:

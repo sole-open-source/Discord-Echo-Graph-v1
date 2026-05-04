@@ -5,19 +5,19 @@ from contextlib import contextmanager
 from src import settings
 from typing import Generator
 
-# Setup database engine and session for FastAPI dependency injection
-_engine = create_engine(
-    f"postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASS}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
-)
-_SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+# # Setup database engine and session for FastAPI dependency injection
+# _engine = create_engine(
+#     f"postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASS}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+# )
+# _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 
 
-def get_db() -> Generator[Session, None, None]:
-    db = _SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# def get_db() -> Generator[Session, None, None]:
+#     db = _SessionLocal()
+#     try:
+#         yield db
+#     finally:
+#         db.close()
 
 
 class DatabaseError(Exception):
@@ -64,8 +64,8 @@ class CrudHelper:
 
 if __name__ == "__main__":
     from src import settings
-    from src import chat_lightrag_models
-    crud = CrudHelper(conn_string=settings.CHAT_DB_APP_CONN_STRING, model=chat_lightrag_models)
+    from src import chatedubot_models
+    crud = CrudHelper(conn_string=settings.DB_EDUCHAT_CONN_STRING, model=chatedubot_models)
     crud.create_database()
 
 """

@@ -130,7 +130,7 @@ def format_langchain_messages(session : Session, messages : List[BaseMessage], u
 
 def run_chat(user_id : int, chat_id : int, human_message : str, llm : BaseChatModel, system_message : str = SYSTEM_PROMPT_2) -> List[Union[Ai_Message, Tool_Message]]:
     logger.info("run_chat")
-    engine = create_engine(settings.DB_NAME_EDUCHAT)
+    engine = create_engine(settings.DB_EDUCHAT_CONN_STRING)
     MySession = sessionmaker(bind=engine)
     session = MySession()
 
