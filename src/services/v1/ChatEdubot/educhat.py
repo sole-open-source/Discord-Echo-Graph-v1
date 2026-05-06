@@ -1,15 +1,13 @@
 import asyncio
 import discord
 from discord.ext import commands
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 
 
 from src import settings
 from src import chatedubot_models as model
-from .run_chat import run_chat
+from .run_chat import run_chat, _SessionLocal
 from src.logging_config import get_logger
 
 logger = get_logger(module_name="botv2", DIR="botv2")
@@ -27,6 +25,9 @@ LLM = ChatGroq(
 
 # discord_user_id -> {user_db_id, chat_id, channel_id}
 _active_chats: dict[int, dict] = {}
+
+# Lock por usuario para serializar mensajes concurrentes del mismo usuario
+_user_locks: dict[int, asyncio.Lock] = {}
 
 
 def _get_or_create_user(session, discord_user_id: int, discord_name: str) -> int:
@@ -102,7 +103,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 def _is_allowed():
     async def predicate(ctx: commands.Context) -> bool:
-        if ctx.author.id not in settings.ALLOWED_DISCORD_USER_IDS:
+        if settings.ALLOWED_DISCORD_USER_IDS is not None and ctx.author.id not in settings.ALLOWED_DISCORD_USER_IDS:
             await ctx.reply("No tienes permiso para usar este bot.")
             return False
         return True
@@ -122,9 +123,7 @@ async def start_chat(ctx: commands.Context):
         await ctx.reply("Ya tienes una sesión activa. Escribe `!end` para terminarla antes de iniciar una nueva.")
         return
 
-    engine = create_engine(settings.DB_EDUCHAT_CONN_STRING)
-    MySession = sessionmaker(bind=engine)
-    session = MySession()
+    session = _SessionLocal()
     try:
         user_db_id = _get_or_create_user(session, ctx.author.id, str(ctx.author))
         chat_id = _create_chat(session, user_db_id)
@@ -163,7 +162,7 @@ async def on_message(message: discord.Message):
     if message.content.startswith(bot.command_prefix):
         return
 
-    if message.author.id not in settings.ALLOWED_DISCORD_USER_IDS:
+    if settings.ALLOWED_DISCORD_USER_IDS is not None and message.author.id not in settings.ALLOWED_DISCORD_USER_IDS:
         return
 
     session_info = _active_chats.get(message.author.id)
@@ -178,46 +177,48 @@ async def on_message(message: discord.Message):
     chat_id = session_info["chat_id"]
     logger.info(f"Mensaje de {message.author} (chat_id={chat_id}): {human_message}")
 
-    async with message.channel.typing():
-        max_retries = 3
-        wait_seconds = 10
-        chat_response = None
-        for attempt in range(1, max_retries + 1):
-            try:
-                loop = asyncio.get_event_loop()
-                chat_response = await loop.run_in_executor(
-                    None,
-                    lambda: run_chat(
-                        user_id=user_db_id,
-                        chat_id=chat_id,
-                        human_message=human_message,
-                        llm=LLM,
-                    ),
-                )
-                break
-            except Exception as e:
-                is_rate_limit = "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)
-                if is_rate_limit and attempt < max_retries:
-                    logger.warning(f"Rate limit (intento {attempt}/{max_retries}), reintentando en {wait_seconds}s...")
-                    await asyncio.sleep(wait_seconds)
-                    wait_seconds *= 2
-                else:
-                    logger.error(f"Error en run_chat (intento {attempt}): {e}")
-                    msg = (
-                        "El servicio de IA está temporalmente saturado. Intenta en unos segundos."
-                        if is_rate_limit
-                        else "Ocurrió un error al procesar tu mensaje. Intenta de nuevo."
+    lock = _user_locks.setdefault(message.author.id, asyncio.Lock())
+    async with lock:
+        async with message.channel.typing():
+            max_retries = 3
+            wait_seconds = 10
+            chat_response = None
+            for attempt in range(1, max_retries + 1):
+                try:
+                    loop = asyncio.get_event_loop()
+                    chat_response = await loop.run_in_executor(
+                        None,
+                        lambda: run_chat(
+                            user_id=user_db_id,
+                            chat_id=chat_id,
+                            human_message=human_message,
+                            llm=LLM,
+                        ),
                     )
-                    await message.reply(msg)
-                    return
+                    break
+                except Exception as e:
+                    is_rate_limit = "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)
+                    if is_rate_limit and attempt < max_retries:
+                        logger.warning(f"Rate limit (intento {attempt}/{max_retries}), reintentando en {wait_seconds}s...")
+                        await asyncio.sleep(wait_seconds)
+                        wait_seconds *= 2
+                    else:
+                        logger.error(f"Error en run_chat (intento {attempt}): {e}")
+                        msg = (
+                            "El servicio de IA está temporalmente saturado. Intenta en unos segundos."
+                            if is_rate_limit
+                            else "Ocurrió un error al procesar tu mensaje. Intenta de nuevo."
+                        )
+                        await message.reply(msg)
+                        return
 
-    reply = _format_response(chat_response)
-    for chunk in _split_message(reply):
-        await message.reply(chunk)
+        reply = _format_response(chat_response)
+        for chunk in _split_message(reply):
+            await message.reply(chunk)
 
 
 if __name__ == "__main__":
-    bot.run(settings.DISCORD_BOT_TOKEN)
+    bot.run(settings.DULCINEA_DISCORD_BOT_TOKEN)
 
 
 """

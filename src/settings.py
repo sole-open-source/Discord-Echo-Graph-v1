@@ -23,13 +23,13 @@ DB_EDUCHAT_CONN_STRING = f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@{DB_HOST}:{
 
 
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN") # token admin
-# DULCINEA_DISCORD_BOT_TOKEN = os.getenv("DULCINEA_DISCORD_BOT_TOKEN")
+DULCINEA_DISCORD_BOT_TOKEN = os.getenv("DULCINEA_DISCORD_BOT_TOKEN")
 
-ALLOWED_DISCORD_USER_IDS: set[int] = {
-    int(uid.strip())
-    for uid in os.getenv("ALLOWED_DISCORD_USER_IDS", "").split(",")
-    if uid.strip()
-}
+_raw_allowed_ids = os.getenv("ALLOWED_DISCORD_USER_IDS", "").strip()
+ALLOWED_DISCORD_USER_IDS: set[int] | None = (
+    {int(uid.strip()) for uid in _raw_allowed_ids.split(",") if uid.strip()}
+    if _raw_allowed_ids else None
+)
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")

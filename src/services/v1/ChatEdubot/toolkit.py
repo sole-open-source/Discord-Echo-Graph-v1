@@ -11,6 +11,9 @@ logger = get_logger(module_name="toolkit", DIR="queryAgent")
 LIGHTRAG_URL = f"http://{settings.LIGHTRAG_SERVER_HOST}:{settings.LIGHTRAG_SERVER_PORT}"
 HEADERS = {}
 
+# Cliente persistente: reutiliza conexiones HTTP entre tool calls (keep-alive)
+_http_client = httpx.Client(timeout=120)
+
 
 
 class Reference(TypedDict):
@@ -46,12 +49,10 @@ class LightRagToolKit:
         logger.info(f"Llamando a LightRAG — url={LIGHTRAG_URL}/query mode={mode}")
         logger.debug(f"Query: {query}")
         try:
-            with httpx.Client() as client:
-                response = client.post(
+            response = _http_client.post(
                     f"{LIGHTRAG_URL}/query",
                     json=PAYLOAD,
                     headers=HEADERS,
-                    timeout=120
                 )
             logger.info(f"LightRAG respondió — status={response.status_code}")
             response.raise_for_status()

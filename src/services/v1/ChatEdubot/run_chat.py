@@ -3,6 +3,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage, ToolMessage, ToolCall
 from langchain_core.messages.ai import UsageMetadata
+from langgraph.graph.state import CompiledStateGraph
 
 from typing import List, TypedDict, Any, Union, Optional
 
@@ -10,10 +11,21 @@ from src import settings
 from src import chatedubot_models as model
 from .agent import create_chat_agent
 from .prompts import SYSTEM_PROMPT_2
-import time
 
 from src.logging_config import get_logger
 logger = get_logger(module_name="run_chat", DIR="ChatLightRagv2")
+
+# Engine compartido con pool de conexiones para todos los usuarios
+_engine = create_engine(
+    settings.DB_EDUCHAT_CONN_STRING,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,
+)
+_SessionLocal = sessionmaker(bind=_engine)
+
+# Caché de agentes compilados: se compila una vez por instancia de LLM
+_agent_cache: dict[int, CompiledStateGraph] = {}
 
 
 
@@ -84,7 +96,6 @@ def format_langchain_messages(session : Session, messages : List[BaseMessage], u
     agent_messages = list(reversed(agent_messages))
 
     for msg in agent_messages:
-        time.sleep(0.1)
         if isinstance(msg, AIMessage):
             content = msg.content
             tool_calls = [{
@@ -92,7 +103,7 @@ def format_langchain_messages(session : Session, messages : List[BaseMessage], u
                 'args':x["args"],
                 'id':x["id"],
                 'type':x["type"]
-            } for x in (msg.tool_calls or [])] # Por si message.tool_calls es None
+            } for x in (msg.tool_calls or [])]
             usage_metadata = msg.usage_metadata
             data = {"content":content, "tool_calls":tool_calls, "usage_metadata":usage_metadata}
             messages_record = model.ChatMessages(
@@ -102,7 +113,6 @@ def format_langchain_messages(session : Session, messages : List[BaseMessage], u
                 message=data
             )
             session.add(messages_record)
-            session.commit()
             data['type'] = 'Ai'
             response.append(data)
         elif isinstance(msg, ToolMessage):
@@ -117,11 +127,11 @@ def format_langchain_messages(session : Session, messages : List[BaseMessage], u
                 message=data
             )
             session.add(messages_record)
-            session.commit()
             data['type'] = 'Tool'
             response.append(data)
-    
-    return response 
+
+    session.commit()
+    return response
     
             
 
@@ -130,9 +140,7 @@ def format_langchain_messages(session : Session, messages : List[BaseMessage], u
 
 def run_chat(user_id : int, chat_id : int, human_message : str, llm : BaseChatModel, system_message : str = SYSTEM_PROMPT_2) -> List[Union[Ai_Message, Tool_Message]]:
     logger.info("run_chat")
-    engine = create_engine(settings.DB_EDUCHAT_CONN_STRING)
-    MySession = sessionmaker(bind=engine)
-    session = MySession()
+    session = _SessionLocal()
 
     message_record = model.ChatMessages(
         chat_id=chat_id,
@@ -148,7 +156,7 @@ def run_chat(user_id : int, chat_id : int, human_message : str, llm : BaseChatMo
     message_history_records = session.query(model.ChatMessages).filter_by(
         chat_id=chat_id,
         user_id=user_id
-    ).order_by(model.ChatMessages.create_at).all()
+    ).order_by(model.ChatMessages.id).all()
     logger.info("Historial de mensajes conseguido")
 
     messages = set_langchain_format(message_history_records=message_history_records, system_message=system_message)
@@ -161,7 +169,11 @@ def run_chat(user_id : int, chat_id : int, human_message : str, llm : BaseChatMo
     logger.debug("\n"*2)
 
 
-    agent = create_chat_agent(llm=llm)
+    agent_key = id(llm)
+    if agent_key not in _agent_cache:
+        logger.info("Compilando agente por primera vez para este LLM")
+        _agent_cache[agent_key] = create_chat_agent(llm=llm)
+    agent = _agent_cache[agent_key]
     logger.info("invokando al agente")
     agent_response = agent.invoke({"messages":messages})
     messages = agent_response["messages"]
@@ -189,7 +201,7 @@ if __name__=="__main__":
     from langchain_groq import ChatGroq
 
 
-    from src import chat_lightrag_models as models
+    from src import chatedubot_models as models
     from src import settings
 
 
