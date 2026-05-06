@@ -218,7 +218,8 @@ async def on_message(message: discord.Message):
 
 
 if __name__ == "__main__":
-    bot.run(settings.DULCINEA_DISCORD_BOT_TOKEN)
+    bot.run(settings.DISCORD_BOT_TOKEN)
+    # bot.run(settings.DULCINEA_DISCORD_BOT_TOKEN)
 
 
 """
