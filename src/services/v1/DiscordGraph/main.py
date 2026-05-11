@@ -35,7 +35,7 @@ def prune_in_lightrag_status_from_summaries(session : Session):
 
 
 
-def partition_summary(session : Session, max_msg : int = 100):
+def partition_summary(session : Session, max_msg : int = 10000):
     summary_records = session.query(dmodels.DiscordChannelChronologicalSummary).filter(
         dmodels.DiscordChannelChronologicalSummary.status == None
     ).all()
@@ -148,12 +148,12 @@ if __name__ == "__main__":
     # ========================================================
     # ========================================================
 
-    pendingtracks = get_pending_track_ids(session=session)
-    lightrag_track_ids = pendingtracks.get("lightrag_track_ids")
-    print(f"lightrag_track_ids: {len(lightrag_track_ids)}")
+    # pendingtracks = get_pending_track_ids(session=session)
+    # lightrag_track_ids = pendingtracks.get("lightrag_track_ids")
+    # print(f"lightrag_track_ids: {len(lightrag_track_ids)}")
 
 
-    sync_processed_lightrag_docs(session=session, pendingtracks=pendingtracks)
+    # sync_processed_lightrag_docs(session=session, pendingtracks=pendingtracks)
 
 
     # ========================================================

@@ -209,16 +209,16 @@ class DiscordMessageExtractionLog(Base):
 # );
 # CREATE INDEX ix_lightrag_format_error_timestamp ON lightrag_format_error (timestamp);
 # CREATE INDEX ix_lightrag_format_error_chunk_id ON lightrag_format_error (chunk_id);
-class LightragFormatError(Base):
-    __tablename__ = "lightrag_format_error"
+# class LightragFormatError(Base):
+#     __tablename__ = "lightrag_format_error"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, nullable=False, server_default=func.now(), index=True)
-    chunk_id = Column(String(255), nullable=False, index=True)
-    tipo = Column(String(50), nullable=False)
-    nombre = Column(Text, nullable=False)
-    campos_encontrados = Column(Integer, nullable=False)
-    campos_esperados = Column(Integer, nullable=False)
+#     id = Column(Integer, primary_key=True, autoincrement=True)
+#     timestamp = Column(DateTime, nullable=False, server_default=func.now(), index=True)
+#     chunk_id = Column(String(255), nullable=False, index=True)
+#     tipo = Column(String(50), nullable=False)
+#     nombre = Column(Text, nullable=False)
+#     campos_encontrados = Column(Integer, nullable=False)
+#     campos_esperados = Column(Integer, nullable=False)
 
 
 
@@ -232,15 +232,15 @@ class LightragFormatError(Base):
 # );
 # CREATE INDEX ix_lightrag_token_usage_timestamp ON lightrag_token_usage (timestamp);
 # CREATE INDEX ix_lightrag_token_usage_model ON lightrag_token_usage (model);
-class LightragTokenUsage(Base):
-    __tablename__ = "lightrag_token_usage"
+# class LightragTokenUsage(Base):
+#     __tablename__ = "lightrag_token_usage"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, nullable=False, server_default=func.now(), index=True)
-    model = Column(String(100), nullable=False, index=True)
-    prompt_tokens = Column(Integer, nullable=False)
-    completion_tokens = Column(Integer, nullable=False)
-    total_tokens = Column(Integer, nullable=False)
+#     id = Column(Integer, primary_key=True, autoincrement=True)
+#     timestamp = Column(DateTime, nullable=False, server_default=func.now(), index=True)
+#     model = Column(String(100), nullable=False, index=True)
+#     prompt_tokens = Column(Integer, nullable=False)
+#     completion_tokens = Column(Integer, nullable=False)
+#     total_tokens = Column(Integer, nullable=False)
 
 
 

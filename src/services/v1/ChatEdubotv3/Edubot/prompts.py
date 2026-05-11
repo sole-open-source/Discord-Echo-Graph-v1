@@ -1,0 +1,3 @@
+EDUBOT_SYSTEM_PROMPT_1 = """
+
+"""

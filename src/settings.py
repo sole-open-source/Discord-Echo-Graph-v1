@@ -40,6 +40,12 @@ LIGHTRAG_SERVER_PORT = os.getenv("LIGHTRAG_SERVER_PORT")
 LIGHTRAG_SERVER_HOST = os.getenv("LIGHTRAG_SERVER_HOST")
 
 
+NEO4J_URI = os.getenv("NEO4J_URI")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+
+
+
 
 if __name__=="__main__":
     print(ROOT)

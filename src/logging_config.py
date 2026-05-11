@@ -31,7 +31,7 @@ def get_logger(module_name: str, DIR : str):
     Ejemplo: get_logger("graph1")
     """
 
-    LOG_DIR = settings.ROOT / ".logs" / f"{DIR}"
+    LOG_DIR = settings.ROOT / ".logs2" / f"{DIR}"
     LOG_DIR.mkdir(parents=True, exist_ok=True)   
 
     log_path = LOG_DIR / f"{module_name}.log"
