@@ -178,19 +178,19 @@ class PostgresToolKit:
                 func=self._query_data_base,
                 args_schema=self.QueryDataBaseArgs
             ),
-            StructuredTool.from_function(
-                name="get_tables_name_by_modules",
-                description=(
-                    "Devuelve los nombres exactos de las tablas de la base de datos que pertenecen "
-                    "a los módulos indicados. "
-                    "Llama a esta herramienta como PRIMER PASO antes de cualquier consulta: "
-                    "lee la descripción de la base de datos en el system prompt, identifica los módulos "
-                    "relevantes y usa esta herramienta para obtener los nombres de tabla correctos "
-                    "antes de llamar a `get_tables_schemas`."
-                ),
-                func=self._get_tables_name_by_modules,
-                args_schema=self.TablesByModules
-            )
+            # StructuredTool.from_function(
+            #     name="get_tables_name_by_modules",
+            #     description=(
+            #         "Devuelve los nombres exactos de las tablas de la base de datos que pertenecen "
+            #         "a los módulos indicados. "
+            #         "Llama a esta herramienta como PRIMER PASO antes de cualquier consulta: "
+            #         "lee la descripción de la base de datos en el system prompt, identifica los módulos "
+            #         "relevantes y usa esta herramienta para obtener los nombres de tabla correctos "
+            #         "antes de llamar a `get_tables_schemas`."
+            #     ),
+            #     func=self._get_tables_name_by_modules,
+            #     args_schema=self.TablesByModules
+            # )
         ]
 
         return tools

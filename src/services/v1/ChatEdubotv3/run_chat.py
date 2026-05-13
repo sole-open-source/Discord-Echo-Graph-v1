@@ -8,9 +8,12 @@ from typing import List, TypedDict, Any, Union, Optional, Dict
 
 from src import settings
 from src import chatedubot_models as models
+from .set_langchain_messages import Ai_Message, Tool_Message, set_json_to_langchain_format, set_langchain_format_to_json
 
 from src.logging_config import get_logger
 logger = get_logger(module_name="run_chat", DIR="ChatLightRagv2")
+
+
 
 
 
@@ -25,20 +28,6 @@ def set_langchain_format(message_history_records : List[models.ChatMessages], sy
         records.append({**msg.message, "role": role_map[msg.role]})
     return set_json_to_langchain_format(records)
 
-
-
-
-class Ai_Message(TypedDict):
-    content: Union[str, List[Union[str, dict]]]
-    tool_calls: List[ToolCall]
-    usage_metadata: Optional[UsageMetadata]
-    role: str
-
-class Tool_Message(TypedDict):
-    content: Any
-    tool_call_id: str
-    name: Optional[str]
-    role: str
 
 
 def format_langchain_messages(session : Session, messages : List[BaseMessage], user_id : int, chat_id : int) -> List[Union[Ai_Message, Tool_Message]]:
@@ -74,99 +63,6 @@ def format_langchain_messages(session : Session, messages : List[BaseMessage], u
 
 
 
-# ==============================================================================================
-# ==============================================================================================
-
-class Human_Message(TypedDict):
-    content : str
-    role : str
-
-
-class System_Message(TypedDict):
-    content : str
-    role : str
-
-
-def set_langchain_format_to_json(messages : List[BaseMessage]) -> List[Union[Ai_Message, Tool_Message, Human_Message, System_Message]]:
-    response = []
-    for msg in messages:
-        if isinstance(msg, AIMessage):
-            content = msg.content
-            tool_calls = [{
-                'name':x["name"],
-                'args':x["args"],
-                'id':x["id"],
-                'type':x["type"]
-            } for x in (msg.tool_calls or [])]
-            usage_metadata = msg.usage_metadata
-            data = {"content":content, "tool_calls":tool_calls, "usage_metadata":usage_metadata}
-            data["role"] = "Ai"
-            response.append(data)
-        elif isinstance(msg,ToolMessage):
-            content = msg.content
-            tool_call_id = msg.tool_call_id
-            name = msg.name
-            data = {"content":content, "tool_call_id":tool_call_id, "name":name}
-            data["role"] = "Tool"
-            response.append(data)
-        elif isinstance(msg, HumanMessage):
-            content = msg.content
-            data = {"content":content}
-            data["role"] = "Human"
-            response.append(data)
-        elif isinstance(msg, SystemMessage):
-            content = msg.content
-            data = {"content":content}
-            data["role"] = "System"
-            response.append(data)
-    
-    return response
-        
-
-
-def set_json_to_langchain_format(record : List[Dict[str, Any]]) -> List[BaseMessage]:
-    response = []
-    for msg in record:
-        if msg.get("role") == "System":
-            message = SystemMessage(content=msg.get("content"))
-            response.append(message)
-        elif msg.get("role") == "Human":
-            message = HumanMessage(content=msg.get("content"))
-            response.append(message)
-        elif msg.get("role") == "Ai":
-            langchai_tool_calls = [
-                ToolCall(
-                    name=y['name'],
-                    args=y['args'],
-                    id=y['id'],
-                    type=y['type']
-                ) for y in msg.get("tool_calls")
-            ]
-            message = AIMessage(
-                content=msg.get("content"),
-                tool_calls=langchai_tool_calls,
-                usage_metadata=msg.get("usage_metadata")
-            )
-            response.append(message)
-        elif msg.get("role") == "Tool":
-            message = ToolMessage(
-                content=msg.get("content"),
-                tool_call_id=msg.get("tool_call_id"),
-                name = msg.get("name")
-            )
-            response.append(message)
-        else:
-            logger.warning(f"el siguiente json no se pudo clasificar: \n {msg}")
-        
-    return response
-        
-        
-
-
-
-
-
-# # Nota: chat_agent debe alamcenar la memoria de la conversacion en un stade llamado messages
 def run_chat(
         session : Session, 
         user_id : int, 
@@ -176,7 +72,7 @@ def run_chat(
         edubot_system_message : str, 
         originabot_system_message : str
 ):
-
+    
     logger.info("guardando human_message en la tabla de chat principal")
     chat_message_record = models.ChatMessages(
         chat_id=chat_id,
@@ -184,8 +80,7 @@ def run_chat(
         role=models.MessageRole.HUMAN,
         message={"content":human_message}
     )
-
-    # logger.info(f"{HumanMessage(content=human_message).pretty_repr()}")
+    
 
     session.add(chat_message_record)
     session.commit()
@@ -197,6 +92,8 @@ def run_chat(
     ).order_by(models.ChatMessages.id).all()
     logger.info("Historial de mensajes conseguido")
 
+
+    # =========================
     # =========================
     record = session.query(models.EduBotStates).filter_by(chat_id=chat_id).first() # record.state debe ser una lista de jsons
     if record is None:
@@ -205,6 +102,7 @@ def run_chat(
     else:
         logger.info(f"recuperando memorio del subagente. Hay {len(record.state)}")
         originabot_agent_hystory = set_json_to_langchain_format(record.state)
+    # =========================
     # =========================
 
 
@@ -215,6 +113,8 @@ def run_chat(
     agent_response = chat_agent.invoke({"messages":messages, "originabot_agent_hystory":originabot_agent_hystory})
     messages = agent_response["messages"]
 
+
+    # =========================
     # =========================
     originabot_agent_hystory = agent_response["originabot_agent_hystory"]
     if originabot_agent_hystory:
@@ -222,6 +122,8 @@ def run_chat(
         record = models.EduBotStates(chat_id=chat_id, state=state)
         session.add(record)
     # =========================
+    # =========================
+
 
     logger.info("Respuestas del agente conseguidas")
 
@@ -237,6 +139,10 @@ def run_chat(
 
 
 
+
+
+
+
 if __name__ == "__main__":
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -244,22 +150,8 @@ if __name__ == "__main__":
     from src import chatedubot_models as models
 
     from Edubot.prompts import EDUBOT_SYSTEM_PROMPT_1
-    from OriginabotdbAgent.prompts import DB_AGENT_SYSTEM_PROMPT_1
+    from OriginabotdbAgent.prompts import DB_AGENT_SYSTEM_PROMPT_3
     
     engine = create_engine(settings.DB_EDUCHAT_CONN_STRING)
     MySession = sessionmaker(bind=engine)
     session = MySession()
-
-
-
-
-
-
-    
-
-
-    
-
-
-
-

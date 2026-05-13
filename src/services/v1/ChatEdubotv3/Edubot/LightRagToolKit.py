@@ -71,7 +71,7 @@ class LightRagToolKit:
         )
 
         rag = LightRAG(
-            working_dir="", # db en posgres y neo4j es irrelevante
+            working_dir="/tmp/lightrag_retriver", 
             llm_model_func=gemini_model_complete,
             llm_model_name=conf.LLM_MODEL,
             embedding_func=gemini_embedding,
@@ -156,3 +156,27 @@ class LightRagToolKit:
         return tools
 
 
+if __name__ == "__main__":
+
+    toolkit = LightRagToolKit()
+    tools = toolkit.get_tools()
+
+    query_lightrag = tools[0]
+
+    key_word = "Manhattan"
+    mode = "local"
+    question = "Cual es la respuesta oficial de la alcaldia al proyecto Manhattan"
+
+
+    x = query_lightrag.invoke({"question":question, "mode":mode})
+    print(x)
+
+    pass
+
+
+"""
+python3 -m src.services.v1.ChatEdubotv3.Edubot.LightRagToolKit
+
+
+
+"""

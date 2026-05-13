@@ -31,7 +31,7 @@ async def process_single_chunk(llm : BaseChatModel, semaphore : asyncio.Semaphor
     async with semaphore:
         try:
             ai_message = await llm.ainvoke(prompt)
-            # print(f"usage_metadata: {ai_message.usage_metadata}, \n\n numero de caracteres: {len(ai_message.content)} \n\n\n")
+            logger.info(f"usage_metadata: {ai_message.usage_metadata}, \n\n numero de caracteres: {len(ai_message.content)} \n\n\n")
             return {"partial_response":ai_message.content, "usage_metadata":ai_message.usage_metadata, "data_chunk":data_chunk}
         except Exception as e:
             logger.info(f"=== process_single_chunk")

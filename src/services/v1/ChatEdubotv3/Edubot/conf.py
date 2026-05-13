@@ -1,4 +1,4 @@
-SUBAGENT_NAME = "name"
+SUBAGENT_NAME = "invoke_Originabotdb_subagent"
 
 
 # ============================================
@@ -7,7 +7,7 @@ SUBAGENT_NAME = "name"
 
 
 
-LLM_MODEL    = "gemini-2.5-flash-lite"
+LLM_MODEL    = "gemini-2.5-flash"
 
 EMBED_DIM    = 1536
 EMBED_MODEL  = "gemini-embedding-001"

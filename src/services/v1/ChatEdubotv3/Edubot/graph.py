@@ -11,7 +11,8 @@ from langgraph.graph import add_messages, END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from typing import TypedDict, List, Annotated, Literal
-
+from sqlalchemy.orm import Session
+import asyncio
 
 
 logger = get_logger(module_name="chat_edubot", DIR="Agent")
@@ -21,7 +22,6 @@ class SetToolResponse(TypedDict):
     tool_message_list : List[ToolMessage]
     tool_message_subagent : ToolMessage
 
-    
 
 
 def set_tool_response(tool_responses : List[ToolMessage], tool_name : str) -> SetToolResponse:
@@ -52,7 +52,7 @@ def set_tool_response(tool_responses : List[ToolMessage], tool_name : str) -> Se
 
 
 
-def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStateGraph) -> CompiledStateGraph:
+def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStateGraph, session : Session, semaphore : asyncio.Semaphore) -> CompiledStateGraph:
 
     # ==========================
     # Tools
@@ -64,7 +64,7 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
     originabotdb_subagent_toolkit = OriginabotdbSubAgentToolKit()
     originabot_tools = originabotdb_subagent_toolkit.get_tools()
 
-    retrive_toolkit = RetrivePartialResponsesToolKit()
+    retrive_toolkit = RetrivePartialResponsesToolKit(llm=llm, session=session, semaphore=semaphore)
     retrive_tools = retrive_toolkit.get_tools()
 
 
@@ -82,7 +82,7 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
         originabot_agent_hystory : List[BaseMessage]
 
     
-    tool_invoker = ToolNode(messages_key="messages")
+    tool_invoker = ToolNode(messages_key="messages", tools=tools)
 
     # ===================
     # Nodos del grafo
@@ -126,9 +126,11 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
                 logger.info(f"{msg.pretty_repr()}")
             return {"messages":result}
         
+
         originabot_agent_hystory = state["originabot_agent_hystory"]
+        originabot_agent_hystory.append(HumanMessage(content=tool_message_subagent.content))
         logger.info("invocando al subagente")
-        subagent_response = originabotdb_subagent.invoke(originabot_agent_hystory)
+        subagent_response = originabotdb_subagent.invoke({"messages":originabot_agent_hystory})
         originabot_agent_hystory = subagent_response["messages"]
         ai_message : AIMessage = subagent_response["messages"][-1]
         tool_message_subagent.content = ai_message.content
@@ -166,3 +168,98 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
     return builder.compile()
 
 
+
+
+if __name__ == "__main__":
+
+    from src import settings
+    from langchain_core.messages import SystemMessage, HumanMessage
+    from ..OriginabotdbAgent.prompts import DB_AGENT_SYSTEM_PROMPT_3
+    from .prompts import EDUBOT_SYSTEM_PROMPT_1
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    from langchain_groq import ChatGroq
+    import json
+    import asyncio
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from ..OriginabotdbAgent.graph import create_chat_agent
+    
+    from pathlib import Path
+
+    from src.logging_config import setup_base_logging
+    setup_base_logging()
+
+    # model = "gemini-2.0-flash"
+    # llm = ChatGoogleGenerativeAI(model=model, temperature=0.5, api_key=settings.GOOGLE_API_KEY)
+
+    model = "openai/gpt-oss-120b"
+    llm = ChatGroq(model=model, temperature=0.2, api_key=settings.GROQ_API_KEY)
+
+    root_dir = Path(__file__).resolve().parent.parent
+    # print(root_dir)
+    path = root_dir / "OriginabotdbAgent" / "originabotSKILL.md"
+    with open(path, "r", encoding="utf-8") as f:
+        description = f.read()
+    
+    # print(description)
+
+    DB_USER = "postgres"
+    DB_PASS = "postgres"
+    DB_HOST = "localhost"
+    DB_PORT = "5432"
+    DB_NAME = "originabotdb"
+
+    conn_string = f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    engine = create_engine(conn_string)
+
+    path = root_dir / "OriginabotdbAgent" / "originabot.json"
+    with open(path, "r", encoding="utf-8") as f:
+        originabotdb_json = json.load(f)
+    
+    originabot_agent = create_chat_agent(llm=llm, engine=engine, originabotdb_json=originabotdb_json)
+
+    semaphore = asyncio.Semaphore(3)
+
+    engine = create_engine(settings.DB_DISCORD_CONN_STRING)
+    MySession = sessionmaker(bind=engine)
+    session = MySession()
+
+    edubot = create_chat_edubot(llm=llm, originabotdb_subagent=originabot_agent, semaphore=semaphore, session=session)
+    
+
+    messages = [SystemMessage(content=EDUBOT_SYSTEM_PROMPT_1)]
+
+    originabot_system_message = DB_AGENT_SYSTEM_PROMPT_3.format(top_n=15, description=description)
+    originabot_agent_hystory = [SystemMessage(content=originabot_system_message)]
+    
+
+    while True:
+        print("========================= Human Message =============================\n")
+        human_message = input()
+        if human_message=="exit":
+            break
+        human_message = HumanMessage(content=human_message)
+        messages.append(human_message)
+        response = edubot.invoke({"messages":messages, "originabot_agent_hystory":originabot_agent_hystory})
+        messages = response["messages"]
+        originabot_agent_hystory = response["originabot_agent_hystory"]
+        print("\n"*10)
+        print(type(originabot_agent_hystory))
+        print(len(originabot_agent_hystory))
+        for msg in originabot_agent_hystory:
+            logger.debug(f"{type(msg.pretty_repr())}")
+            logger.debug(f"{msg}")
+
+    print("\n Fin del chat")
+
+
+
+
+"""
+python3 -m src.services.v1.ChatEdubotv3.Edubot.graph
+
+
+minifarm_projectprice
+
+"""
