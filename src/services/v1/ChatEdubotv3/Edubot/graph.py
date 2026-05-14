@@ -14,6 +14,8 @@ from typing import TypedDict, List, Annotated, Literal
 from sqlalchemy.orm import Session
 import asyncio
 
+from src.chatedubot_models import UsageMetadata as UsageMetadataRecord, MetaDataTask
+
 
 logger = get_logger(module_name="chat_edubot", DIR="Agent")
 
@@ -72,6 +74,8 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
     logger.info(f"hay {len(tools)} tools")
     llm_with_tools = llm.bind_tools(tools=tools)
 
+    _model_name = getattr(llm, "model_name", None) or getattr(llm, "model", None)
+
     # =========================
     # Estados del grafo
     # =========================
@@ -90,18 +94,33 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
     # ===================
 
     def ReAct_node(state : State) -> State:
-        # logger.info("=== ReAct_node")
         logger.info("---"*4 + " ReAct_node \n")
         messages = state["messages"]
-        # originabot_agent_hystory = None
         try:
             ai_message = llm_with_tools.invoke(messages)
             logger.info(f"\n {ai_message.pretty_repr()} \n\n")
         except Exception as e:
             logger.error(f"Error en ReAct_node: \n {e}")
             raise ValueError(f"Error: \n {e}")
-        finally:
-            return {"messages":ai_message}
+
+        usage = ai_message.usage_metadata
+        if usage:
+            try:
+                record = UsageMetadataRecord(
+                    message_id=state.get("current_message_id"),
+                    input_tokens=usage.get("input_tokens", 0),
+                    output_tokens=usage.get("output_tokens", 0),
+                    model_name=_model_name,
+                    task=MetaDataTask.EDUBOT,
+                )
+                educhat_session.add(record)
+                educhat_session.commit()
+                logger.info(f"UsageMetadata guardado: message_id={state.get('current_message_id')}, task=EDUBOT")
+            except Exception as e:
+                logger.error(f"Error guardando UsageMetadata: {e}")
+                educhat_session.rollback()
+
+        return {"messages":ai_message}
         
     
     def tool_node_wrapper(state : State) -> State:
