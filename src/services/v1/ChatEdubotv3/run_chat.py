@@ -1,7 +1,6 @@
 from sqlalchemy.orm import Session
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage, ToolMessage, ToolCall
-from langchain_core.messages.ai import UsageMetadata
 from langgraph.graph.state import CompiledStateGraph
 
 from typing import List, TypedDict, Any, Union, Optional, Dict
@@ -84,6 +83,7 @@ def run_chat(
 
     session.add(chat_message_record)
     session.commit()
+    current_message_id = chat_message_record.id
     logger.info("human message guardado \n\n")
 
     message_history_records = session.query(models.ChatMessages).filter_by(
@@ -110,7 +110,7 @@ def run_chat(
     logger.info("Historial de mensajes en formato de langchain conseguido \n\n")
 
 
-    agent_response = chat_agent.invoke({"messages":messages, "originabot_agent_hystory":originabot_agent_hystory})
+    agent_response = chat_agent.invoke({"messages":messages, "originabot_agent_hystory":originabot_agent_hystory, "current_message_id":current_message_id})
     messages = agent_response["messages"]
 
 
@@ -181,15 +181,12 @@ if __name__ == "__main__":
     model = "openai/gpt-oss-120b"
     llm = ChatGroq(model=model, temperature=0.2, api_key=settings.GROQ_API_KEY)
 
+    originabotdb_engine = create_engine(f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
 
-    conn_string = f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    engine = create_engine(conn_string)
-
-    originabotdb_subagent = create_chat_agent(llm=llm, engine=engine, originabotdb_json=originabotdb_json)
-
-    engine = create_engine(settings.DB_EDUCHAT_CONN_STRING)
-    MySession = sessionmaker(bind=engine)
-    session = MySession()
+    educhat_engine = create_engine(settings.DB_EDUCHAT_CONN_STRING)
+    EduchatSession = sessionmaker(bind=educhat_engine)
+    session = EduchatSession()           # sesión principal usada por run_chat
+    agent_educhat_session = EduchatSession()  # sesión dedicada para UsageMetadata de los agentes
 
     discord_engine = create_engine(settings.DB_DISCORD_CONN_STRING)
     DiscordSession = sessionmaker(bind=discord_engine)
@@ -197,7 +194,9 @@ if __name__ == "__main__":
 
     semaphore = asyncio.Semaphore(3)
 
-    edubot = create_chat_edubot(llm=llm, originabotdb_subagent=originabotdb_subagent, semaphore=semaphore, session=discord_session)
+    originabotdb_subagent = create_chat_agent(llm=llm, engine=originabotdb_engine, originabotdb_json=originabotdb_json, educhat_session=agent_educhat_session)
+
+    edubot = create_chat_edubot(llm=llm, originabotdb_subagent=originabotdb_subagent, semaphore=semaphore, session=discord_session, educhat_session=agent_educhat_session)
 
     system_edubot = EDUBOT_SYSTEM_PROMPT_1
 
