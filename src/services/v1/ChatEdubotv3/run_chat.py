@@ -11,7 +11,7 @@ from src import chatedubot_models as models
 from .set_langchain_messages import Ai_Message, Tool_Message, set_json_to_langchain_format, set_langchain_format_to_json
 
 from src.logging_config import get_logger
-logger = get_logger(module_name="run_chat", DIR="ChatLightRagv2")
+logger = get_logger(module_name="run_chat", DIR="Agents")
 
 
 
@@ -98,7 +98,7 @@ def run_chat(
     record = session.query(models.EduBotStates).filter_by(chat_id=chat_id).first() # record.state debe ser una lista de jsons
     if record is None:
         logger.info("No hay historial del subagente")
-        originabot_agent_hystory = set_json_to_langchain_format([SystemMessage(content=originabot_system_message)])
+        originabot_agent_hystory = set_json_to_langchain_format([{"role": "System", "content": originabot_system_message}])
     else:
         logger.info(f"recuperando memorio del subagente. Hay {len(record.state)}")
         originabot_agent_hystory = set_json_to_langchain_format(record.state)
@@ -148,10 +148,77 @@ if __name__ == "__main__":
     from sqlalchemy.orm import sessionmaker
     from src import settings
     from src import chatedubot_models as models
+    from langchain_groq import ChatGroq
+    from pathlib import Path
 
-    from Edubot.prompts import EDUBOT_SYSTEM_PROMPT_1
-    from OriginabotdbAgent.prompts import DB_AGENT_SYSTEM_PROMPT_3
+    from .OriginabotdbAgent.graph import create_chat_agent
+    from .Edubot.graph import create_chat_edubot
+    import json
+    import asyncio
+
+
+    from .Edubot.prompts import EDUBOT_SYSTEM_PROMPT_1
+    from .OriginabotdbAgent.prompts import DB_AGENT_SYSTEM_PROMPT_3
     
+
+    root_dir = Path(__file__).resolve().parent
+    path = root_dir / "OriginabotdbAgent" / "originabotSKILL.md"
+    with open(path, "r", encoding="utf-8") as f:
+        description = f.read()
+    
+    # TODO esto es legacy no es nesario per debe ponerse pq aun es param reque
+    path = root_dir / "OriginabotdbAgent" / "originabot.json"
+    with open(path, "r", encoding="utf-8") as f:
+        originabotdb_json = json.load(f)
+    
+
+    DB_USER = "postgres"
+    DB_PASS = "postgres"
+    DB_HOST = "localhost"
+    DB_PORT = "5432"
+    DB_NAME = "originabotdb"
+
+    model = "openai/gpt-oss-120b"
+    llm = ChatGroq(model=model, temperature=0.2, api_key=settings.GROQ_API_KEY)
+
+
+    conn_string = f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    engine = create_engine(conn_string)
+
+    originabotdb_subagent = create_chat_agent(llm=llm, engine=engine, originabotdb_json=originabotdb_json)
+
     engine = create_engine(settings.DB_EDUCHAT_CONN_STRING)
     MySession = sessionmaker(bind=engine)
     session = MySession()
+
+    discord_engine = create_engine(settings.DB_DISCORD_CONN_STRING)
+    DiscordSession = sessionmaker(bind=discord_engine)
+    discord_session = DiscordSession()
+
+    semaphore = asyncio.Semaphore(3)
+
+    edubot = create_chat_edubot(llm=llm, originabotdb_subagent=originabotdb_subagent, semaphore=semaphore, session=discord_session)
+
+    system_edubot = EDUBOT_SYSTEM_PROMPT_1
+
+    originabot_system_message = DB_AGENT_SYSTEM_PROMPT_3.format(top_n=15, description=description)
+
+
+    user_id = 1
+    chat_id = 1
+
+    human_message = "Hola"
+    human_message = "cuantaos registros tiene la tabla minifarm_projectprice de originabotdb ?"
+    human_message = "listo, ahora me gustaria saber quien es Eduardo Ospina en Solenium y Unergy"
+
+
+
+
+    run_chat(session=session, user_id=user_id, chat_id=chat_id, human_message=human_message, chat_agent=edubot, edubot_system_message=system_edubot, originabot_system_message=originabot_system_message)
+
+
+"""
+python3 -m src.services.v1.ChatEdubotv3.run_chat
+
+
+"""

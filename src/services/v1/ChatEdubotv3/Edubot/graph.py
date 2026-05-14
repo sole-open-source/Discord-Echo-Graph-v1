@@ -5,7 +5,7 @@ from .OriginabotdbToolKit import OriginabotdbSubAgentToolKit
 from .RegularSearchToolKit.RegularSearchToolKit import RetrivePartialResponsesToolKit
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import BaseMessage, ToolMessage, AIMessage
+from langchain_core.messages import BaseMessage, ToolMessage, AIMessage, HumanMessage
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.graph import add_messages, END, START, StateGraph
 from langgraph.prebuilt import ToolNode

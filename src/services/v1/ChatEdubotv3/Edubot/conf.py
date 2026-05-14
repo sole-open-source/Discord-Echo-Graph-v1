@@ -1,6 +1,5 @@
 SUBAGENT_NAME = "invoke_Originabotdb_subagent"
 
-
 # ============================================
 # Lightrag tool
 # ============================================
