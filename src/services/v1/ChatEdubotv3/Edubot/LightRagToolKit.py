@@ -13,6 +13,8 @@ from lightrag.utils import TokenTracker
 import tiktoken
 import asyncio
 
+from sqlalchemy.orm import Session
+from src.chatedubot_models import UsageMetadata as UsageMetadataRecord, MetaDataTask
 
 from src.logging_config import get_logger
 logger = get_logger(module_name="lightrag_tool", DIR="Agent")
@@ -68,8 +70,12 @@ class QueryLightragResponse(TypedDict):
 
 
 class LightRagToolKit:
-    def __init__(self):
-        pass
+    def __init__(self, session: Session):
+        self.session = session
+        self._message_id: int | None = None
+
+    def set_message_id(self, message_id: int | None) -> None:
+        self._message_id = message_id
 
     async def _aquery_lightrag(self, rag: LightRAG, mode: str, question: str) -> str:
         return await rag.aquery(
@@ -114,11 +120,26 @@ class LightRagToolKit:
         usage = llm_tracker.get_usage()
         emb_usage = embed_tracker.get_usage()
 
-        print(f"Prompt tokens:     {usage['prompt_tokens']}")
-        print(f"Completion tokens: {usage['completion_tokens']}")
-        print(f"Total tokens:      {usage['total_tokens']}")
-        print(f"Embedding tokens (aprox): {emb_usage['total_tokens']}")
-        print(f"Embedding calls:          {emb_usage['call_count']}")
+        logger.info(f"Prompt tokens:     {usage['prompt_tokens']}")
+        logger.info(f"Completion tokens: {usage['completion_tokens']}")
+        logger.info(f"Total tokens:      {usage['total_tokens']}")
+        logger.info(f"Embedding tokens (aprox): {emb_usage['total_tokens']}")
+        logger.info(f"Embedding calls:          {emb_usage['call_count']}")
+
+        try:
+            record = UsageMetadataRecord(
+                message_id=self._message_id,
+                input_tokens=usage["prompt_tokens"],
+                output_tokens=usage["completion_tokens"],
+                model_name=conf.LLM_MODEL,
+                task=MetaDataTask.LIGHTRAG,
+            )
+            self.session.add(record)
+            self.session.commit()
+            logger.info(f"UsageMetadata guardado: message_id={self._message_id}, task=LIGHTRAG")
+        except Exception as e:
+            logger.error(f"Error guardando UsageMetadata: {e}")
+            self.session.rollback()
 
         return result
     
@@ -192,8 +213,14 @@ class LightRagToolKit:
 
 
 if __name__ == "__main__":
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
 
-    toolkit = LightRagToolKit()
+    engine = create_engine(settings.DB_EDUCHAT_CONN_STRING)
+    MySession = sessionmaker(bind=engine)
+    _session = MySession()
+
+    toolkit = LightRagToolKit(session=_session)
     tools = toolkit.get_tools()
 
     query_lightrag = tools[0]

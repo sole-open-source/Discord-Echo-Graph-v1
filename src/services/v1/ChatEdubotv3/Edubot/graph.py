@@ -52,13 +52,13 @@ def set_tool_response(tool_responses : List[ToolMessage], tool_name : str) -> Se
 
 
 
-def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStateGraph, session : Session, semaphore : asyncio.Semaphore) -> CompiledStateGraph:
+def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStateGraph, session : Session, educhat_session : Session, semaphore : asyncio.Semaphore) -> CompiledStateGraph:
 
     # ==========================
     # Tools
     # ==========================
 
-    lightrag_toolkit = LightRagToolKit()
+    lightrag_toolkit = LightRagToolKit(session=educhat_session)
     lightrag_tools = lightrag_toolkit.get_tools()
 
     originabotdb_subagent_toolkit = OriginabotdbSubAgentToolKit()
@@ -80,6 +80,7 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
         messages : Annotated[List[BaseMessage], add_messages]
         # originabot_agent_name : str | None
         originabot_agent_hystory : List[BaseMessage]
+        current_message_id : int | None
 
     
     tool_invoker = ToolNode(messages_key="messages", tools=tools)
@@ -106,6 +107,7 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
     def tool_node_wrapper(state : State) -> State:
         # logger.info("=== tool_node_wrapper")
         logger.info("---"*4 + " tool_node_wrapper\n")
+        lightrag_toolkit.set_message_id(state.get("current_message_id"))
         tool_responses_ditc = tool_invoker.invoke(state) # {"messages" : [ToolMessage, ToolMessage ...]}
         logger.info("tools invocadas")
         
@@ -221,11 +223,15 @@ if __name__ == "__main__":
 
     semaphore = asyncio.Semaphore(3)
 
-    engine = create_engine(settings.DB_DISCORD_CONN_STRING)
-    MySession = sessionmaker(bind=engine)
-    session = MySession()
+    discord_engine = create_engine(settings.DB_DISCORD_CONN_STRING)
+    DiscordSession = sessionmaker(bind=discord_engine)
+    session = DiscordSession()
 
-    edubot = create_chat_edubot(llm=llm, originabotdb_subagent=originabot_agent, semaphore=semaphore, session=session)
+    educhat_engine = create_engine(settings.DB_EDUCHAT_CONN_STRING)
+    EduchatSession = sessionmaker(bind=educhat_engine)
+    educhat_session = EduchatSession()
+
+    edubot = create_chat_edubot(llm=llm, originabotdb_subagent=originabot_agent, semaphore=semaphore, session=session, educhat_session=educhat_session)
     
 
     messages = [SystemMessage(content=EDUBOT_SYSTEM_PROMPT_1)]
