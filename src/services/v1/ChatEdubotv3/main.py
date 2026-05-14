@@ -42,8 +42,8 @@ _discord_engine = create_engine(settings.DB_DISCORD_CONN_STRING)
 _DiscordSession = sessionmaker(bind=_discord_engine)
 
 _originabotdb_engine = create_engine(
-    f"postgresql+psycopg2://{settings.DB_USER}:postgres"
-    f"@localhost:5432/originabotdb"
+    f"postgresql+psycopg2://{settings.ORIGINABOT_NAME}:{settings.ORIGINABOT_PASS}"
+    f"@{settings.ORIGINABOT_HOST}:{settings.ORIGINABOT_PORT}/{settings.ORIGINABOT_NAME}"
 )
 
 # Sesiones long-lived compartidas por los agentes para escribir UsageMetadata
