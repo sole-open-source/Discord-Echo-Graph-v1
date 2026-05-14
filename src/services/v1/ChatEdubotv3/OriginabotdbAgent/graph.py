@@ -2,6 +2,7 @@
 from src.logging_config import get_logger
 from .postgrestoolkit import PostgresToolKit
 from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -16,12 +17,13 @@ from typing import List, Dict
 from groq import BadRequestError as GroqBadRequestError
 from groq import GroqError
 
+from src.chatedubot_models import UsageMetadata as UsageMetadataRecord, MetaDataTask
 
 
 logger = get_logger(module_name="DBchat", DIR="Agents")
 
 
-def create_chat_agent(llm : BaseChatModel, engine : Engine, originabotdb_json : Dict[str, List[str]]) -> CompiledStateGraph:
+def create_chat_agent(llm : BaseChatModel, engine : Engine, originabotdb_json : Dict[str, List[str]], educhat_session : Session) -> CompiledStateGraph:
     
     toolkit = PostgresToolKit(engine=engine, originabotdb_json=originabotdb_json)
     tools = toolkit.get_tools()
@@ -29,14 +31,16 @@ def create_chat_agent(llm : BaseChatModel, engine : Engine, originabotdb_json : 
 
     llm_with_tools = llm.bind_tools(tools)
 
+    _model_name = getattr(llm, "model_name", None) or getattr(llm, "model", None)
+
     class State(TypedDict):
         messages : Annotated[Sequence[BaseMessage], add_messages]
+        current_message_id : int | None
     
     tool_node = ToolNode(messages_key="messages", tools=tools)
     
     def ReAct_node(state : State) -> State:
         logger.info("---"*4 + " ReAct_node \n")
-        #logger.info("=== ReAct_node")
         messages = state["messages"]
         try:
             ai_message = llm_with_tools.invoke(messages)
@@ -44,6 +48,24 @@ def create_chat_agent(llm : BaseChatModel, engine : Engine, originabotdb_json : 
             logger.error(f"Error: {e}")
             raise ValueError(f"Error: {e}")
         logger.info(f"\n {ai_message.pretty_repr()} \n\n")
+
+        usage = ai_message.usage_metadata
+        if usage:
+            try:
+                record = UsageMetadataRecord(
+                    message_id=state.get("current_message_id"),
+                    input_tokens=usage.get("input_tokens", 0),
+                    output_tokens=usage.get("output_tokens", 0),
+                    model_name=_model_name,
+                    task=MetaDataTask.ORIGINABOTDB,
+                )
+                educhat_session.add(record)
+                educhat_session.commit()
+                logger.info(f"UsageMetadata guardado: message_id={state.get('current_message_id')}, task=ORIGINABOTDB")
+            except Exception as e:
+                logger.error(f"Error guardando UsageMetadata: {e}")
+                educhat_session.rollback()
+
         return {"messages":ai_message}
 
 
@@ -98,25 +120,20 @@ if __name__=="__main__":
     import json
 
     from sqlalchemy import create_engine
-    
+    from sqlalchemy.orm import sessionmaker
+
     from pathlib import Path
 
     from src.logging_config import setup_base_logging
     setup_base_logging()
 
-    # model = "gemini-2.0-flash"
-    # llm = ChatGoogleGenerativeAI(model=model, temperature=0.5, api_key=settings.GOOGLE_API_KEY)
-
     model = "openai/gpt-oss-120b"
     llm = ChatGroq(model=model, temperature=0.2, api_key=settings.GROQ_API_KEY)
 
     root_dir = Path(__file__).resolve().parent
-    # print(root_dir)
     path = root_dir / "originabotSKILL.md"
     with open(path, "r", encoding="utf-8") as f:
         description = f.read()
-    
-    # print(description)
 
     DB_USER = "postgres"
     DB_PASS = "postgres"
@@ -127,12 +144,15 @@ if __name__=="__main__":
     conn_string = f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     engine = create_engine(conn_string)
 
+    educhat_engine = create_engine(settings.DB_EDUCHAT_CONN_STRING)
+    EduchatSession = sessionmaker(bind=educhat_engine)
+    educhat_session = EduchatSession()
+
     path = root_dir / "originabot.json"
     with open(path, "r", encoding="utf-8") as f:
         originabotdb_json = json.load(f)
 
-
-    chat = create_chat_agent(llm=llm, engine=engine, originabotdb_json=originabotdb_json)
+    chat = create_chat_agent(llm=llm, engine=engine, originabotdb_json=originabotdb_json, educhat_session=educhat_session)
 
     system_prompt = DB_AGENT_SYSTEM_PROMPT_3.format(top_n=15, description=description)
     messages = [SystemMessage(content=system_prompt)]
@@ -143,7 +163,7 @@ if __name__=="__main__":
             break
         human_message = HumanMessage(content=human_message)
         messages.append(human_message)
-        response = chat.invoke({"messages":messages})
+        response = chat.invoke({"messages":messages, "current_message_id":None})
         messages = response["messages"]
 
     print("\n Fin del chat")

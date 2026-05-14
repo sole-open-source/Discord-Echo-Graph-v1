@@ -134,7 +134,7 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
         originabot_agent_hystory = state["originabot_agent_hystory"]
         originabot_agent_hystory.append(HumanMessage(content=tool_message_subagent.content))
         logger.info("invocando al subagente")
-        subagent_response = originabotdb_subagent.invoke({"messages":originabot_agent_hystory})
+        subagent_response = originabotdb_subagent.invoke({"messages":originabot_agent_hystory, "current_message_id":state.get("current_message_id")})
         originabot_agent_hystory = subagent_response["messages"]
         ai_message : AIMessage = subagent_response["messages"][-1]
         tool_message_subagent.content = ai_message.content
@@ -221,7 +221,11 @@ if __name__ == "__main__":
     with open(path, "r", encoding="utf-8") as f:
         originabotdb_json = json.load(f)
     
-    originabot_agent = create_chat_agent(llm=llm, engine=engine, originabotdb_json=originabotdb_json)
+    educhat_engine_sub = create_engine(settings.DB_EDUCHAT_CONN_STRING)
+    EduchatSessionSub = sessionmaker(bind=educhat_engine_sub)
+    educhat_session_sub = EduchatSessionSub()
+
+    originabot_agent = create_chat_agent(llm=llm, engine=engine, originabotdb_json=originabotdb_json, educhat_session=educhat_session_sub)
 
     semaphore = asyncio.Semaphore(3)
 
