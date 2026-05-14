@@ -64,34 +64,35 @@ class EduBotStates(Base):
 
 
 
-# class ModelsProvider(Base):
-#     __tablename__ = "models_provider"
+class ModelsProvider(Base):
+    __tablename__ = "models_provider"
 
-#     id = Column(Integer, primary_key=True)
-#     model_name = Column(String)
-#     model_provider = Column(String)
-#     pricing_input_tokens = Column(Float)
-#     pricing_output_tokens = Column(Float)
-#     create_at = Column(DateTime, server_default=func.now())
-
-
-# class MetaDataTask(enum.Enum):
-#     EDUBOT = "edubot_agent"
-#     ORIGINABOTDB = "originabotdb_agent"
-#     LIGHTRAG = "lightrag"
+    id = Column(Integer, primary_key=True)
+    model_name = Column(String)
+    model_provider = Column(String)
+    pricing_input_tokens = Column(Float)
+    pricing_output_tokens = Column(Float)
+    create_at = Column(DateTime, server_default=func.now())
 
 
+class MetaDataTask(enum.Enum):
+    EDUBOT = "edubot_agent"
+    ORIGINABOTDB = "originabotdb_agent"
+    LIGHTRAG = "lightrag"
+    SEARCH_BY_KEYWORD = "search_by_keyword"
 
-# class UsageMetadata(Base):
-#     __tablename__ = "usage_metadata"
 
-#     id = Column(Integer, primary_key=True)
-#     message_id = Column(Integer, ForeignKey("chat_messages.id"))
-#     input_tokens = Column(Integer)
-#     output_tokens = Column(Integer)
-#     model_name = Column(String, ForeignKey("models_provider.model_name"))
-#     task = Column(Enum(MetaDataTask), nullable=True)
-#     create_at = Column(DateTime, server_default=func.now())
+
+class UsageMetadata(Base):
+    __tablename__ = "usage_metadata"
+
+    id = Column(Integer, primary_key=True)
+    message_id = Column(Integer, ForeignKey("chat_messages.id"))
+    input_tokens = Column(Integer)
+    output_tokens = Column(Integer)
+    model_name = Column(String, ForeignKey("models_provider.model_name"))
+    task = Column(Enum(MetaDataTask), nullable=True)
+    create_at = Column(DateTime, server_default=func.now())
 
 
   
