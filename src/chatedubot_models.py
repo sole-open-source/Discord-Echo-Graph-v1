@@ -68,7 +68,7 @@ class ModelsProvider(Base):
     __tablename__ = "models_provider"
 
     id = Column(Integer, primary_key=True)
-    model_name = Column(String)
+    model_name = Column(String, unique=True)
     model_provider = Column(String)
     pricing_input_tokens = Column(Float)
     pricing_output_tokens = Column(Float)
