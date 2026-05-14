@@ -96,11 +96,45 @@ class DiscordChannelChronologicalSummary(Base):
     number_messages = Column(Integer)
     #last_message_id = Column(BigInteger, ForeignKey("discord_messages.id"))
     summary = Column(Text, nullable=True)
-    summary_embedding = Column(Vector[3072])
+    # summary_embedding = Column(Vector[3072])
     #rag_summary = Column(Text)
-    key_words = Column(JSON, nullable=True)
+    # key_words = Column(JSON, nullable=True)
     status = Column(Enum('in_lightrag', 'ready', name='summary_status'), nullable=True)
 
+
+
+# CREATE TABLE discord_message_extraction_log (
+#     id SERIAL PRIMARY KEY,
+#     channel_id BIGINT NOT NULL REFERENCES discord_channels(id),
+#     messages_extracted INTEGER NOT NULL,
+#     extracted_at TIMESTAMP DEFAULT now()
+# );
+# CREATE INDEX ix_discord_message_extraction_log_channel_id ON discord_message_extraction_log (channel_id);
+# CREATE INDEX ix_discord_message_extraction_log_extracted_at ON discord_message_extraction_log (extracted_at);
+class DiscordMessageExtractionLog(Base):
+    __tablename__ = "discord_message_extraction_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    channel_id = Column(BigInteger, ForeignKey("discord_channels.id"), index=True, nullable=False)
+    messages_extracted = Column(Integer, nullable=False)
+    extracted_at = Column(DateTime, server_default=func.now(), index=True)
+
+
+
+"""
+CREATE TABLE discord_channel_context (
+    id SERIAL PRIMARY KEY,
+    channel_id BIGINT,
+    summary_context TEXT,
+    FOREIGN KEY (channel_id) REFERENCES discord_channels(id)
+);
+"""
+class DiscordChannelContext(Base):
+    __tablename__ = "discord_channel_context"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    channel_id = Column(BigInteger, ForeignKey("discord_channels.id"))
+    summary_context = Column(Text, nullable=True)
 
 
 
@@ -176,21 +210,6 @@ class LightRagDocs(Base):
 # CREATE INDEX ix_discord_message_extraction_log_extracted_at ON discord_message_extraction_log (extracted_at);
 
 
-# CREATE TABLE discord_message_extraction_log (
-#     id SERIAL PRIMARY KEY,
-#     channel_id BIGINT NOT NULL REFERENCES discord_channels(id),
-#     messages_extracted INTEGER NOT NULL,
-#     extracted_at TIMESTAMP DEFAULT now()
-# );
-# CREATE INDEX ix_discord_message_extraction_log_channel_id ON discord_message_extraction_log (channel_id);
-# CREATE INDEX ix_discord_message_extraction_log_extracted_at ON discord_message_extraction_log (extracted_at);
-class DiscordMessageExtractionLog(Base):
-    __tablename__ = "discord_message_extraction_log"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    channel_id = Column(BigInteger, ForeignKey("discord_channels.id"), index=True, nullable=False)
-    messages_extracted = Column(Integer, nullable=False)
-    extracted_at = Column(DateTime, server_default=func.now(), index=True)
 
 
 
@@ -246,14 +265,6 @@ class DiscordMessageExtractionLog(Base):
 
 
 
-# class DiscordChannelContext(Base):
-#     __tablename__ = "discord_channel_context"
-
-#     id = Column(Integer, primary_key=True, autoincrement=True)
-#     channel_id = Column(BigInteger, ForeignKey("discord_channels.id"))
-#     summary = Column(Text, nullable=True)
-#     summary_embedding = Column(Vector[3072])
-#     cronological_summary_lenght = Column(Integer)
 
 
 

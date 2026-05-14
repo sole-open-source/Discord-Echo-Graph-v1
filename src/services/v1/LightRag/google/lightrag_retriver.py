@@ -27,6 +27,35 @@ os.environ["NEO4J_PASSWORD"] = settings.NEO4J_PASSWORD
 
 os.environ["LLM_MODEL"] = conf.LLM_MODEL
 
+
+
+
+import tiktoken
+
+class EmbeddingTokenTracker:
+    def __init__(self):
+        self.total_tokens = 0
+        self.call_count = 0
+        # cl100k_base es una buena aproximación para modelos Gemini
+        self._enc = tiktoken.get_encoding("cl100k_base")
+
+    def get_usage(self):
+        return {"total_tokens": self.total_tokens, "call_count": self.call_count}
+
+
+def make_tracked_embed(base_func, embed_tracker: EmbeddingTokenTracker):
+    async def tracked(*args, **kwargs):
+        texts = args[0] if args else kwargs.get("texts", [])
+        for t in texts:
+            embed_tracker.total_tokens += len(embed_tracker._enc.encode(t))
+        embed_tracker.call_count += 1
+        return await base_func(*args, **kwargs)
+    return tracked
+
+
+
+
+
 async def query_once(rag: LightRAG, mode: str, question: str) -> str:
     return await rag.aquery(
         question,
@@ -87,18 +116,22 @@ async def query_with_context(rag: LightRAG, mode: str, question: str):
 
 
 async def main(mode : str, question : str):
+
+    embed_tracker = EmbeddingTokenTracker()
+
     gemini_embedding = EmbeddingFunc(
         embedding_dim=conf.EMBED_DIM,
         max_token_size=conf.EMBED_MAX_TOKEN_SIZE,
         model_name=conf.EMBED_MODEL,
         send_dimensions=True,
-        func=gemini_embed.func,
+        #func=gemini_embed.func,
+        func=make_tracked_embed(gemini_embed.func, embed_tracker),
     )
 
     tracker = TokenTracker()
 
     rag = LightRAG(
-        working_dir="",
+        working_dir="/tmp/lightrag_retriver",
         llm_model_func=gemini_model_complete,
         llm_model_name=conf.LLM_MODEL,
         embedding_func=gemini_embedding,
@@ -113,20 +146,39 @@ async def main(mode : str, question : str):
 
     usage = tracker.get_usage()
     # tracker.get_usage() te da un dict con prompt_tokens, completion_tokens, total_tokens y call_count acumulados de todas las llamadas al LLM que hizo aquery().
+    response = await query_once(rag=rag, mode=mode, question=question)
+
+    print("="*60)
 
     print(f"Prompt tokens:     {usage['prompt_tokens']}")
     print(f"Completion tokens: {usage['completion_tokens']}")
     print(f"Total tokens:      {usage['total_tokens']}")
     print(f"LLM calls:         {usage['call_count']}")
 
+
+    emb_usage = embed_tracker.get_usage()
+
+    print(f"Embedding tokens (aprox): {emb_usage['total_tokens']}")
+    print(f"Embedding calls:          {emb_usage['call_count']}")
+
     
     print("="*60)
-    response = await query_once(rag=rag, mode=mode, question=question)
+    
     return response
 
 
 
 if __name__ == "__main__":
-    question = "Cual es la respuesta oficial de la alcaldia al proyecto Manhattan ?"
+    question = "Cual es la respuesta oficial de la alcaldia al proyecto Manhattan "
     mode = "local"
     response = asyncio.run(main(mode=mode, question=question))
+    print("============================================================")
+    print(response)
+
+
+"""
+python3 -m src.services.v1.LightRag.google.lightrag_retriver
+
+
+
+"""

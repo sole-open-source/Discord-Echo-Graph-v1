@@ -24,7 +24,7 @@ class UserChat(Base):
     __tablename__ = "users_chats"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("discord_users.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
     create_at = Column(DateTime, server_default=func.now())
 
 
@@ -42,7 +42,7 @@ class ChatMessages(Base):
 
     id = Column(Integer, primary_key=True)
     chat_id = Column(Integer, ForeignKey("users_chats.id"))
-    user_id = Column(Integer, ForeignKey("discord_users.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
     role = Column(Enum(MessageRole), nullable=False)
     message = Column(JSON)
     create_at = Column(DateTime, server_default=func.now())
@@ -56,7 +56,7 @@ class EduBotStates(Base):
 
     id = Column(Integer, primary_key=True)
     chat_id = Column(Integer, ForeignKey("users_chats.id"))
-    sub_chat_id = Column(Integer)
+    sub_chat_id = Column(Integer, nullable=True)
     state = Column(JSON)
     state_name = Column(String, nullable=True)
 
