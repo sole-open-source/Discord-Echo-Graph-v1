@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 from lightrag import LightRAG, QueryParam
 from lightrag.llm.gemini import gemini_embed, gemini_model_complete
 from lightrag.utils import EmbeddingFunc
-
+from lightrag.utils import TokenTracker
+import tiktoken
 import asyncio
 
 
@@ -30,6 +31,28 @@ os.environ["NEO4J_USERNAME"] = settings.NEO4J_USERNAME
 os.environ["NEO4J_PASSWORD"] = settings.NEO4J_PASSWORD
 
 os.environ["LLM_MODEL"] = conf.LLM_MODEL
+
+
+class EmbeddingTokenTracker:
+    def __init__(self):
+        self.total_tokens = 0
+        self.call_count = 0
+        # cl100k_base es una buena aproximación para modelos Gemini
+        self._enc = tiktoken.get_encoding("cl100k_base")
+
+    def get_usage(self):
+        return {"total_tokens": self.total_tokens, "call_count": self.call_count}
+
+
+def make_tracked_embed(base_func, embed_tracker: EmbeddingTokenTracker):
+    async def tracked(*args, **kwargs):
+        texts = args[0] if args else kwargs.get("texts", [])
+        for t in texts:
+            embed_tracker.total_tokens += len(embed_tracker._enc.encode(t))
+        embed_tracker.call_count += 1
+        return await base_func(*args, **kwargs)
+    return tracked
+
 
 
 
@@ -61,6 +84,8 @@ class LightRagToolKit:
     
 
     async def _lightrag_backend(self, mode : str, question : str):
+        llm_tracker = TokenTracker()
+        embed_tracker = EmbeddingTokenTracker()
 
         gemini_embedding = EmbeddingFunc(
             embedding_dim=conf.EMBED_DIM,
@@ -79,11 +104,21 @@ class LightRagToolKit:
             doc_status_storage=conf.LIGHTRAG_DOC_STATUS_STORAGE,
             vector_storage=conf.LIGHTRAG_VECTOR_STORAGE,
             graph_storage=conf.LIGHTRAG_GRAPH_STORAGE,
+            llm_model_kwargs={"token_tracker": llm_tracker},
         )
 
         await rag.initialize_storages()
 
         result = await self._aquery_lightrag(rag=rag, mode=mode, question=question)
+
+        usage = llm_tracker.get_usage()
+        emb_usage = embed_tracker.get_usage()
+
+        print(f"Prompt tokens:     {usage['prompt_tokens']}")
+        print(f"Completion tokens: {usage['completion_tokens']}")
+        print(f"Total tokens:      {usage['total_tokens']}")
+        print(f"Embedding tokens (aprox): {emb_usage['total_tokens']}")
+        print(f"Embedding calls:          {emb_usage['call_count']}")
 
         return result
     
