@@ -1,67 +1,4 @@
 services:
-  lightrag:
-    container_name: lightrag
-    #image: lightrag-custom:latest
-    # En el server remoto
-    image: somath/lightrag-custom:latest 
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile.custom
-    ports:
-      - "${HOST:-0.0.0.0}:${PORT:-9621}:9621"
-    volumes:
-      # Persistent data
-      - ./data/rag_storage:/app/data/rag_storage
-      - ./data/inputs:/app/data/inputs
-      # Config and secrets
-      - ./config.ini:/app/config.ini
-      - ./.env:/app/.env
-      # Metrics CSVs — accesibles en ./metrics/ del host
-      - ./metrics:/app/metrics
-    restart: on-failure
-    extra_hosts:
-      # Permite que el contenedor alcance servicios corriendo en el host
-      # (PostgreSQL y Neo4j locales)
-      - "host.docker.internal:host-gateway"
-    environment:
-      WORKING_DIR: "/app/data/rag_storage"
-      INPUT_DIR: "/app/data/inputs"
-      LIGHTRAG_METRICS_DIR: "/app/metrics"
-      HOST: "0.0.0.0"
-      PORT: "9621"
-
-      # LLM — Gemini
-      LLM_BINDING: "${LLM_BINDING:-gemini}"
-      LLM_BINDING_API_KEY: "${LLM_BINDING_API_KEY}"
-      LLM_MODEL: "${LLM_MODEL:-gemini-2.0-flash}"
-
-      # Embedding — Gemini
-      EMBEDDING_BINDING: "${EMBEDDING_BINDING:-gemini}"
-      EMBEDDING_BINDING_API_KEY: "${EMBEDDING_BINDING_API_KEY}"
-      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-gemini-embedding-001}"
-      EMBEDDING_DIM: "${EMBEDDING_DIM:-1536}"
-      EMBEDDING_TOKEN_LIMIT: "${EMBEDDING_TOKEN_LIMIT:-2048}"
-      EMBEDDING_SEND_DIM: "${EMBEDDING_SEND_DIM:-true}"
-
-      # Storage backends
-      LIGHTRAG_KV_STORAGE: "${LIGHTRAG_KV_STORAGE:-PGKVStorage}"
-      LIGHTRAG_VECTOR_STORAGE: "${LIGHTRAG_VECTOR_STORAGE:-PGVectorStorage}"
-      LIGHTRAG_GRAPH_STORAGE: "${LIGHTRAG_GRAPH_STORAGE:-Neo4JStorage}"
-      LIGHTRAG_DOC_STATUS_STORAGE: "${LIGHTRAG_DOC_STATUS_STORAGE:-PGDocStatusStorage}"
-
-      # PostgreSQL
-      POSTGRES_HOST: "${POSTGRES_HOST:-host.docker.internal}"
-      POSTGRES_PORT: "${POSTGRES_PORT:-5432}"
-      POSTGRES_USER: "${POSTGRES_USER}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-      POSTGRES_DATABASE: "${POSTGRES_DATABASE:-rag}"
-
-      # Neo4j
-      NEO4J_URI: "${NEO4J_URI:-bolt://host.docker.internal:7687}"
-      NEO4J_USERNAME: "${NEO4J_USERNAME:-neo4j}"
-      NEO4J_PASSWORD: "${NEO4J_PASSWORD}"
-
-
   discord-echo-graph:
     container_name: echo-graph
     build:
@@ -74,7 +11,5 @@ services:
     restart: on-failure
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      - lightrag
 
 
