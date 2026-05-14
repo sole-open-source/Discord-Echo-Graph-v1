@@ -1,5 +1,5 @@
 from .retrive_messages import get_all_messages_chunks, get_all_messages_chunks_with_regex
-from .generate_partial_response import  generate_partial_responses
+from .generate_partial_response import generate_partial_responses
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import StructuredTool, BaseTool
@@ -9,31 +9,62 @@ from typing import List
 
 import asyncio
 
+from src.chatedubot_models import UsageMetadata as UsageMetadataRecord, MetaDataTask
+from src.logging_config import get_logger
+logger = get_logger(module_name="regular_search_toolkit", DIR="Agent")
+
+
 class RetrivePartialResponsesToolKit:
-    def __init__(self, llm : BaseChatModel, semaphore : asyncio.Semaphore, session : Session):
+    def __init__(self, llm : BaseChatModel, semaphore : asyncio.Semaphore, session : Session, educhat_session : Session):
         self.llm = llm
         self.semaphore = semaphore
         self.session = session
+        self.educhat_session = educhat_session
+        self._message_id: int | None = None
+
+    def set_message_id(self, message_id: int | None) -> None:
+        self._message_id = message_id
+
+    def _get_model_name(self) -> str | None:
+        return getattr(self.llm, "model_name", None) or getattr(self.llm, "model", None)
+
+    def _save_usage_metadata(self, input_tokens: int, output_tokens: int) -> None:
+        try:
+            record = UsageMetadataRecord(
+                message_id=self._message_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                model_name=self._get_model_name(),
+                task=MetaDataTask.SEARCH_BY_KEYWORD,
+            )
+            self.educhat_session.add(record)
+            self.educhat_session.commit()
+            logger.info(f"UsageMetadata guardado: message_id={self._message_id}, task=SEARCH_BY_KEYWORD")
+        except Exception as e:
+            logger.error(f"Error guardando UsageMetadata: {e}")
+            self.educhat_session.rollback()
 
     
 
     def _search_by_substring_keyword(self, key_word : str, query : str) -> str:
         try:
             chunks = get_all_messages_chunks(session=self.session, key_word=key_word)
-            partials_responses = asyncio.run(
+            result = asyncio.run(
                 generate_partial_responses(semaphore=self.semaphore, query=query, llm=self.llm, chunks=chunks)
             )
-            return partials_responses
+            self._save_usage_metadata(input_tokens=result["input_tokens"], output_tokens=result["output_tokens"])
+            return result["response"]
         except Exception as e:
             return f"Error: {e}"
-    
+
     def _serach_by_exact_keyword(self, key_word : str, query : str) -> str:
         try:
             chunks = get_all_messages_chunks_with_regex(session=self.session, key_word=key_word)
-            partials_responses = asyncio.run(
+            result = asyncio.run(
                 generate_partial_responses(semaphore=self.semaphore, query=query, llm=self.llm, chunks=chunks)
             )
-            return partials_responses
+            self._save_usage_metadata(input_tokens=result["input_tokens"], output_tokens=result["output_tokens"])
+            return result["response"]
         except Exception as e:
             return f"Error: {e}"
 

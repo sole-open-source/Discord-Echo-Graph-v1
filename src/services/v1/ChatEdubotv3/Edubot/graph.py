@@ -64,7 +64,7 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
     originabotdb_subagent_toolkit = OriginabotdbSubAgentToolKit()
     originabot_tools = originabotdb_subagent_toolkit.get_tools()
 
-    retrive_toolkit = RetrivePartialResponsesToolKit(llm=llm, session=session, semaphore=semaphore)
+    retrive_toolkit = RetrivePartialResponsesToolKit(llm=llm, session=session, educhat_session=educhat_session, semaphore=semaphore)
     retrive_tools = retrive_toolkit.get_tools()
 
 
@@ -107,7 +107,9 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
     def tool_node_wrapper(state : State) -> State:
         # logger.info("=== tool_node_wrapper")
         logger.info("---"*4 + " tool_node_wrapper\n")
-        lightrag_toolkit.set_message_id(state.get("current_message_id"))
+        current_message_id = state.get("current_message_id")
+        lightrag_toolkit.set_message_id(current_message_id)
+        retrive_toolkit.set_message_id(current_message_id)
         tool_responses_ditc = tool_invoker.invoke(state) # {"messages" : [ToolMessage, ToolMessage ...]}
         logger.info("tools invocadas")
         

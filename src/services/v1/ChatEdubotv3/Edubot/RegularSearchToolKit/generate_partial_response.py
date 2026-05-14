@@ -19,13 +19,19 @@ class DataChunk(TypedDict):
     server_name : str
     start_time : str
     end_time : str
-    
+
 
 
 class ProccesSingleChunk(TypedDict):
     partial_response : str
     usage_metadata : Dict[str, Any]
     data_chunk : DataChunk
+
+
+class GeneratePartialResponsesResult(TypedDict):
+    response : str
+    input_tokens : int
+    output_tokens : int
 
 async def process_single_chunk(llm : BaseChatModel, semaphore : asyncio.Semaphore, prompt : str, data_chunk : MessageChunk) -> ProccesSingleChunk:
     async with semaphore:
@@ -40,7 +46,7 @@ async def process_single_chunk(llm : BaseChatModel, semaphore : asyncio.Semaphor
 
 
 
-async def generate_partial_responses(semaphore : asyncio.Semaphore, query : str, llm : BaseChatModel, chunks : List[MessageChunk], max_chunks : int = 50) -> str:
+async def generate_partial_responses(semaphore : asyncio.Semaphore, query : str, llm : BaseChatModel, chunks : List[MessageChunk], max_chunks : int = 50) -> GeneratePartialResponsesResult:
     tasks = [
         process_single_chunk(
             llm=llm,
@@ -58,13 +64,15 @@ async def generate_partial_responses(semaphore : asyncio.Semaphore, query : str,
     ]
     logger.info(f"Se van a generar {len(tasks)} sub respuestas")
     if len(tasks) >= max_chunks:
-        return "Error, Se ha encontrado muchos canales de discord de texto extraidos de discord recuperados por la palabra clave `key_word`. Usar una palabra clave menos frecuente"
+        return {
+            "response": "Error, Se ha encontrado muchos canales de discord de texto extraidos de discord recuperados por la palabra clave `key_word`. Usar una palabra clave menos frecuente",
+            "input_tokens": 0,
+            "output_tokens": 0,
+        }
 
     if not tasks:
         raise ValueError("chunks es una lista vacia")
-    
-    # TODO: ir contando los tokens gastados
-    count = 0
+
     input_tokens, output_tokens = 0, 0
     results = await asyncio.gather(*tasks)
     response = []
@@ -72,13 +80,20 @@ async def generate_partial_responses(semaphore : asyncio.Semaphore, query : str,
     for r in results:
         if r:
             partial_response = r.get("partial_response")
-            usage_metadata = r.get("usage_metadata")    
+            usage_metadata = r.get("usage_metadata")    # ejemplo: usage_metadata = {"input_tokens": 350, "output_tokens": 240, "total_tokens": 590, "input_token_details": {"audio": 10, "cache_creation": 200, "cache_read": 100,}, "output_token_details": {"audio": 10, "reasoning": 200,},}
             data_chunk = r.get("data_chunk")
+
+            input_tokens += usage_metadata.get("input_tokens", 0) or 0
+            output_tokens += usage_metadata.get("output_tokens", 0) or 0
 
             title = f"# Nombre del server de discord: {data_chunk.get("server_name")} Nombre del canal: {data_chunk.get("channel_name")} Fecha: desde {data_chunk.get("start_time")} hasta {data_chunk.get("end_time")}"
             response.append("\n\n".join([title, partial_response, "---"]))
 
-    return "\n\n\n\n".join(response)
+    return {
+        "response": "\n\n\n\n".join(response),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+    }
 
             
 
@@ -113,8 +128,9 @@ if __name__ == "__main__":
     llm = ChatGroq(model=model, temperature=0.2, api_key=settings.GROQ_API_KEY)
 
 
-    response = asyncio.run(generate_partial_responses(semaphore=semaphore, query=query, llm=llm, chunks=chunks))
-    print(response)
+    result = asyncio.run(generate_partial_responses(semaphore=semaphore, query=query, llm=llm, chunks=chunks))
+    print(result["response"])
+    print(f"input_tokens: {result['input_tokens']}, output_tokens: {result['output_tokens']}")
 
 
 
