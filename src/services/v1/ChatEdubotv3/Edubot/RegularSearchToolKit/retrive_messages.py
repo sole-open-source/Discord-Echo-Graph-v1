@@ -83,7 +83,7 @@ def fetch_messages_by_keyword_with_regex(
     
     if len(messages_records) >= max_retrive_messages:
         logger.error(f"se han recuperado demaciados mensajes que cointienen exactamente key_word: {key_word}")
-        raise ValueError("Se han recuperado demaciados mensajes")
+        raise ValueError(f"Se han recuperado demaciados mensajes: {len(messages_records)}")
 
     channels: Dict[int, List] = {}
 

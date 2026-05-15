@@ -47,11 +47,26 @@ async def process_single_chunk(llm : BaseChatModel, semaphore : asyncio.Semaphor
 
 
 async def generate_partial_responses(semaphore : asyncio.Semaphore, query : str, llm : BaseChatModel, chunks : List[MessageChunk], max_chunks : int = 50) -> GeneratePartialResponsesResult:
+    if not chunks:
+        raise ValueError("chunks es una lista vacia")
+
+    prompts = [
+        PROMPT_CHANNEL_MESSAGES_1.format(query=query, messages=d.get("fianl_messages"), channel_name=d.get("channel_name"))
+        for d in chunks
+    ]
+
+    # Aproximación estándar: ~4 caracteres por token
+    total_approx_tokens = sum(len(p) // 4 for p in prompts)
+    if total_approx_tokens > 100_000:
+        raise ValueError(
+            f"El total aproximado de tokens en los prompts para conseguir las respuestas parciales son: ({total_approx_tokens:,}) supera el límite de 100,000 tokens."
+        )
+
     tasks = [
         process_single_chunk(
             llm=llm,
             semaphore=semaphore,
-            prompt=PROMPT_CHANNEL_MESSAGES_1.format(query=query, messages=d.get("fianl_messages"), channel_name=d.get("channel_name")),
+            prompt=prompt,
             data_chunk={
                 "channel_id":d.get("channel_id"),
                 "channel_name":d.get("channel_name"),
@@ -60,7 +75,7 @@ async def generate_partial_responses(semaphore : asyncio.Semaphore, query : str,
                 "end_time":d.get("end_time")
             }
         )
-        for d in chunks
+        for prompt, d in zip(prompts, chunks)
     ]
     logger.info(f"Se van a generar {len(tasks)} sub respuestas")
     if len(tasks) >= max_chunks:
@@ -69,9 +84,6 @@ async def generate_partial_responses(semaphore : asyncio.Semaphore, query : str,
             "input_tokens": 0,
             "output_tokens": 0,
         }
-
-    if not tasks:
-        raise ValueError("chunks es una lista vacia")
 
     input_tokens, output_tokens = 0, 0
     results = await asyncio.gather(*tasks)
