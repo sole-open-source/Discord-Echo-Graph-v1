@@ -92,6 +92,7 @@ class LightRagToolKit:
     async def _lightrag_backend(self, mode : str, question : str):
         llm_tracker = TokenTracker()
         embed_tracker = EmbeddingTokenTracker()
+        logger.info("llm y embedding tracker seteados")
 
         gemini_embedding = EmbeddingFunc(
             embedding_dim=conf.EMBED_DIM,
@@ -112,6 +113,7 @@ class LightRagToolKit:
             graph_storage=conf.LIGHTRAG_GRAPH_STORAGE,
             llm_model_kwargs={"token_tracker": llm_tracker},
         )
+        logger.info("servicio de lightrag seteado")
 
         await rag.initialize_storages()
 

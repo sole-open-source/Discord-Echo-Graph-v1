@@ -97,4 +97,13 @@ class UsageMetadata(Base):
 
   
 
+class EduChatLogs(Base):
+    __tablename__ = "educaht_logs"
+
+    id = Column(Integer, primary_key=True)
+    chat_id = Column(Integer, ForeignKey("users_chats.id"))
+    log = Column(Text)
+    create_at = Column(DateTime, server_default=func.now())
+    
+
 

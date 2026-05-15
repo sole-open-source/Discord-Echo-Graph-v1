@@ -136,6 +136,7 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
         logger.info("set_tool_response")
         set_tool_dict = set_tool_response(tool_responses=tool_response, tool_name=SUBAGENT_NAME)
         if set_tool_dict.get("tool_message_subagent") is None:
+            logger.info("Caso 1. No se invoco ningun subagente")
             for msg in tool_response:
                 logger.info(f"{msg.pretty_repr()}")
             return tool_responses_ditc
@@ -143,6 +144,7 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
         tool_message_subagent = set_tool_dict.get("tool_message_subagent")
         tool_message_list = set_tool_dict.get("tool_message_list")
         if tool_message_subagent.content == "ERROR":
+            logger.error("se ha invocado algun subagente mas de una vez a la vez")
             tool_message_subagent.content = "Error: No puedes llamar al subagente mas de 1 vez al mismo tiempo. Invoca al subagente con un sola tarea a la vez"
             result = tool_message_list + [tool_message_subagent]
             for msg in result:

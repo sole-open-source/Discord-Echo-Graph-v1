@@ -39,8 +39,8 @@ def format_langchain_messages(session : Session, messages : List[BaseMessage], u
         agent_messages.append(message)
     agent_messages = list(reversed(agent_messages))
 
-    for msg in agent_messages:
-        logger.info(f"{msg.pretty_repr()}")
+    # for msg in agent_messages:
+    #     logger.info(f"{msg.pretty_repr()}")
 
     role_to_model = {"Ai": models.MessageRole.AI, "Tool": models.MessageRole.TOOL}
     response = []
@@ -84,7 +84,7 @@ def run_chat(
     session.add(chat_message_record)
     session.commit()
     current_message_id = chat_message_record.id
-    logger.info("human message guardado \n\n")
+    logger.info(f"human message guardado, message id: {current_message_id} \n\n")
 
     message_history_records = session.query(models.ChatMessages).filter_by(
         chat_id=chat_id,
