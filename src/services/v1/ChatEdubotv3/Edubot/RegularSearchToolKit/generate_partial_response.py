@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 import asyncio
 
 from src.logging_config import get_logger
-logger = get_logger(module_name="parsial_response", DIR="toolkit_rs")
+logger = get_logger(module_name="parsial_response", DIR="Agent")
 
 
 

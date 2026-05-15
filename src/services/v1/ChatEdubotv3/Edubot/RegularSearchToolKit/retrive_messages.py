@@ -6,7 +6,7 @@ from sqlalchemy import or_
 import re
 
 from src.logging_config import get_logger
-logger = get_logger(module_name="retrive_message", DIR="toolkit_rs")
+logger = get_logger(module_name="retrive_message", DIR="Agent")
 
 
 

@@ -10,7 +10,12 @@ from src import chatedubot_models as models
 from .set_langchain_messages import Ai_Message, Tool_Message, set_json_to_langchain_format, set_langchain_format_to_json
 
 from src.logging_config import get_logger
-logger = get_logger(module_name="run_chat", DIR="Agents")
+logger = get_logger(module_name="run_chat", DIR="Agent")
+
+
+def _log(session: Session, chat_id: int, msg: str) -> None:
+    logger.info(msg)
+    session.add(models.EduChatLogs(chat_id=chat_id, log=msg))
 
 
 
@@ -72,7 +77,7 @@ def run_chat(
         originabot_system_message : str
 ):
     
-    logger.info("guardando human_message en la tabla de chat principal")
+    _log(session, chat_id, "guardando human_message en la tabla de chat principal")
     chat_message_record = models.ChatMessages(
         chat_id=chat_id,
         user_id=user_id,
@@ -84,33 +89,33 @@ def run_chat(
     session.add(chat_message_record)
     session.commit()
     current_message_id = chat_message_record.id
-    logger.info(f"human message guardado, message id: {current_message_id} \n\n")
+    _log(session, chat_id, f"human message guardado, message id: {current_message_id}")
 
     message_history_records = session.query(models.ChatMessages).filter_by(
         chat_id=chat_id,
         user_id=user_id
     ).order_by(models.ChatMessages.id).all()
-    logger.info("Historial de mensajes conseguido")
+    _log(session, chat_id, "Historial de mensajes conseguido")
 
 
     # =========================
     # =========================
     record = session.query(models.EduBotStates).filter_by(chat_id=chat_id).first() # record.state debe ser una lista de jsons
     if record is None:
-        logger.info("No hay historial del subagente")
+        _log(session, chat_id, "No hay historial del subagente")
         originabot_agent_hystory = set_json_to_langchain_format([{"role": "System", "content": originabot_system_message}])
     else:
-        logger.info(f"recuperando memorio del subagente. Hay {len(record.state)}")
+        _log(session, chat_id, f"recuperando memorio del subagente. Hay {len(record.state)}")
         originabot_agent_hystory = set_json_to_langchain_format(record.state)
     # =========================
     # =========================
 
 
     messages = set_langchain_format(message_history_records=message_history_records, system_message=edubot_system_message)
-    logger.info("Historial de mensajes en formato de langchain conseguido \n\n")
+    _log(session, chat_id, "Historial de mensajes en formato de langchain conseguido")
 
 
-    agent_response = chat_agent.invoke({"messages":messages, "originabot_agent_hystory":originabot_agent_hystory, "current_message_id":current_message_id})
+    agent_response = chat_agent.invoke({"messages":messages, "originabot_agent_hystory":originabot_agent_hystory, "current_message_id":current_message_id, "current_chat_id":chat_id})
     messages = agent_response["messages"]
 
 
@@ -125,13 +130,13 @@ def run_chat(
     # =========================
 
 
-    logger.info("Respuestas del agente conseguidas")
+    _log(session, chat_id, "Respuestas del agente conseguidas")
 
     chat_response = format_langchain_messages(session=session, messages=messages, user_id=user_id, chat_id=chat_id)
-    logger.info("los mensajes de langchain se han formateado a json")
+    _log(session, chat_id, "los mensajes de langchain se han formateado a json")
 
 
-    logger.info("guardando en la base de datos \n\n\n\n\n\n\n\n")
+    _log(session, chat_id, "guardando en la base de datos")
     session.close()
 
     return chat_response
@@ -208,7 +213,7 @@ if __name__ == "__main__":
 
     human_message = "Hola"
     human_message = "cuantaos registros tiene la tabla minifarm_projectprice de originabotdb ?"
-    human_message = "listo, ahora me gustaria saber quien es Eduardo Ospina en Solenium y Unergy"
+    human_message = "listo, ahora me gustaria saber quien es Camilo Rivera en Solenium y Unergy"
 
 
 

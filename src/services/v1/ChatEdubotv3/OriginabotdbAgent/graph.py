@@ -17,10 +17,10 @@ from typing import List, Dict
 from groq import BadRequestError as GroqBadRequestError
 from groq import GroqError
 
-from src.chatedubot_models import UsageMetadata as UsageMetadataRecord, MetaDataTask
+from src.chatedubot_models import UsageMetadata as UsageMetadataRecord, MetaDataTask, EduChatLogs
 
 
-logger = get_logger(module_name="DBchat", DIR="Agents")
+logger = get_logger(module_name="DBchat", DIR="Agent")
 
 
 def create_chat_agent(llm : BaseChatModel, engine : Engine, originabotdb_json : Dict[str, List[str]], educhat_session : Session) -> CompiledStateGraph:
@@ -36,18 +36,26 @@ def create_chat_agent(llm : BaseChatModel, engine : Engine, originabotdb_json : 
     class State(TypedDict):
         messages : Annotated[Sequence[BaseMessage], add_messages]
         current_message_id : int | None
-    
+        current_chat_id : int | None
+
+    def _log(chat_id: int | None, msg: str) -> None:
+        logger.info(msg)
+        if chat_id is not None:
+            educhat_session.add(EduChatLogs(chat_id=chat_id, log=msg))
+            educhat_session.commit()
+
     tool_node = ToolNode(messages_key="messages", tools=tools)
     
     def ReAct_node(state : State) -> State:
-        logger.info("---"*4 + " ReAct_node \n")
+        chat_id = state.get("current_chat_id")
+        _log(chat_id, "---"*4 + " ReAct_node")
         messages = state["messages"]
         try:
             ai_message = llm_with_tools.invoke(messages)
         except Exception as e:
             logger.error(f"Error: {e}")
             raise ValueError(f"Error: {e}")
-        logger.info(f"\n {ai_message.pretty_repr()} \n\n")
+        _log(chat_id, ai_message.pretty_repr())
 
         usage = ai_message.usage_metadata
         if usage:
@@ -61,7 +69,7 @@ def create_chat_agent(llm : BaseChatModel, engine : Engine, originabotdb_json : 
                 )
                 educhat_session.add(record)
                 educhat_session.commit()
-                logger.info(f"UsageMetadata guardado: message_id={state.get('current_message_id')}, task=ORIGINABOTDB")
+                _log(chat_id, f"UsageMetadata guardado: message_id={state.get('current_message_id')}, task=ORIGINABOTDB")
             except Exception as e:
                 logger.error(f"Error guardando UsageMetadata: {e}")
                 educhat_session.rollback()
@@ -71,26 +79,26 @@ def create_chat_agent(llm : BaseChatModel, engine : Engine, originabotdb_json : 
 
 
     def tool_node_wrapper(state : State) -> State:
-        logger.info("---"*4 + " tool_node_wrapper\n")
+        chat_id = state.get("current_chat_id")
+        _log(chat_id, "---"*4 + " tool_node_wrapper")
         #logger.info("=== tool_node_wrapper")
         # tool_response será un dict como {"messages": [ToolMessage, ToolMessage, ...]}
         tool_responses = tool_node.invoke(state)
         for tool_response in tool_responses["messages"]:
-            logger.info(f"{tool_response.pretty_repr()}\n")
-        #logger.info("\n")
+            _log(chat_id, tool_response.pretty_repr())
         return tool_responses
     
 
 
     def should_end(state : State) -> Literal["tool_node_wrapper",END]: # type: ignore
-        logger.info("---"*4 + " tool_node_wrapper")
+        chat_id = state.get("current_chat_id")
+        _log(chat_id, "---"*4 + " should_end")
         #logger.info("=== should_end")
         last_message = state["messages"][-1]
         if last_message.tool_calls:
-            logger.info(f"tool_node_wrapper")
+            _log(chat_id, "tool_node_wrapper")
             return "tool_node_wrapper"
-        logger.info("END")
-        logger.info("\n"*10)
+        _log(chat_id, "END")
         return END
     
 

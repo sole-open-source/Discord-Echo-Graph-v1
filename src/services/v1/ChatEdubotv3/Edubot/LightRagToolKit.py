@@ -14,7 +14,7 @@ import tiktoken
 import asyncio
 
 from sqlalchemy.orm import Session
-from src.chatedubot_models import UsageMetadata as UsageMetadataRecord, MetaDataTask
+from src.chatedubot_models import UsageMetadata as UsageMetadataRecord, MetaDataTask, EduChatLogs
 
 from src.logging_config import get_logger
 logger = get_logger(module_name="lightrag_tool", DIR="Agent")
@@ -73,9 +73,19 @@ class LightRagToolKit:
     def __init__(self, session: Session):
         self.session = session
         self._message_id: int | None = None
+        self._chat_id: int | None = None
 
     def set_message_id(self, message_id: int | None) -> None:
         self._message_id = message_id
+
+    def set_chat_id(self, chat_id: int | None) -> None:
+        self._chat_id = chat_id
+
+    def _log(self, msg: str) -> None:
+        logger.info(msg)
+        if self._chat_id is not None:
+            self.session.add(EduChatLogs(chat_id=self._chat_id, log=msg))
+            self.session.commit()
 
     async def _aquery_lightrag(self, rag: LightRAG, mode: str, question: str) -> str:
         return await rag.aquery(
@@ -92,7 +102,7 @@ class LightRagToolKit:
     async def _lightrag_backend(self, mode : str, question : str):
         llm_tracker = TokenTracker()
         embed_tracker = EmbeddingTokenTracker()
-        logger.info("llm y embedding tracker seteados")
+        self._log("llm y embedding tracker seteados")
 
         gemini_embedding = EmbeddingFunc(
             embedding_dim=conf.EMBED_DIM,
@@ -103,7 +113,7 @@ class LightRagToolKit:
         )
 
         rag = LightRAG(
-            working_dir="/tmp/lightrag_retriver", 
+            working_dir="/tmp/lightrag_retriver",
             llm_model_func=gemini_model_complete,
             llm_model_name=conf.LLM_MODEL,
             embedding_func=gemini_embedding,
@@ -113,7 +123,7 @@ class LightRagToolKit:
             graph_storage=conf.LIGHTRAG_GRAPH_STORAGE,
             llm_model_kwargs={"token_tracker": llm_tracker},
         )
-        logger.info("servicio de lightrag seteado")
+        self._log("servicio de lightrag seteado")
 
         await rag.initialize_storages()
 
@@ -122,11 +132,11 @@ class LightRagToolKit:
         usage = llm_tracker.get_usage()
         emb_usage = embed_tracker.get_usage()
 
-        logger.info(f"Prompt tokens:     {usage['prompt_tokens']}")
-        logger.info(f"Completion tokens: {usage['completion_tokens']}")
-        logger.info(f"Total tokens:      {usage['total_tokens']}")
-        logger.info(f"Embedding tokens (aprox): {emb_usage['total_tokens']}")
-        logger.info(f"Embedding calls:          {emb_usage['call_count']}")
+        self._log(f"Prompt tokens:     {usage['prompt_tokens']}")
+        self._log(f"Completion tokens: {usage['completion_tokens']}")
+        self._log(f"Total tokens:      {usage['total_tokens']}")
+        self._log(f"Embedding tokens (aprox): {emb_usage['total_tokens']}")
+        self._log(f"Embedding calls:          {emb_usage['call_count']}")
 
         try:
             record = UsageMetadataRecord(
@@ -138,7 +148,7 @@ class LightRagToolKit:
             )
             self.session.add(record)
             self.session.commit()
-            logger.info(f"UsageMetadata guardado: message_id={self._message_id}, task=LIGHTRAG")
+            self._log(f"UsageMetadata guardado: message_id={self._message_id}, task=LIGHTRAG")
         except Exception as e:
             logger.error(f"Error guardando UsageMetadata: {e}")
             self.session.rollback()

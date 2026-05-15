@@ -11,7 +11,7 @@ from sqlalchemy.schema import CreateTable
 from sqlalchemy.dialects import postgresql
 
 from src.logging_config import get_logger
-logger = get_logger(module_name="postgres", DIR="toolkit")
+logger = get_logger(module_name="postgres", DIR="Agent")
 
 
 class PostgresToolKit:

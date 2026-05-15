@@ -14,7 +14,7 @@ from typing import TypedDict, List, Annotated, Literal
 from sqlalchemy.orm import Session
 import asyncio
 
-from src.chatedubot_models import UsageMetadata as UsageMetadataRecord, MetaDataTask
+from src.chatedubot_models import UsageMetadata as UsageMetadataRecord, MetaDataTask, EduChatLogs
 
 
 logger = get_logger(module_name="chat_edubot", DIR="Agent")
@@ -85,6 +85,13 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
         # originabot_agent_name : str | None
         originabot_agent_hystory : List[BaseMessage]
         current_message_id : int | None
+        current_chat_id : int | None
+
+    def _log(chat_id: int | None, msg: str) -> None:
+        logger.info(msg)
+        if chat_id is not None:
+            educhat_session.add(EduChatLogs(chat_id=chat_id, log=msg))
+            educhat_session.commit()
 
     
     tool_invoker = ToolNode(messages_key="messages", tools=tools)
@@ -94,11 +101,12 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
     # ===================
 
     def ReAct_node(state : State) -> State:
-        logger.info("---"*4 + " ReAct_node \n")
+        chat_id = state.get("current_chat_id")
+        _log(chat_id, "---"*4 + " ReAct_node")
         messages = state["messages"]
         try:
             ai_message = llm_with_tools.invoke(messages)
-            logger.info(f"\n {ai_message.pretty_repr()} \n\n")
+            _log(chat_id, ai_message.pretty_repr())
         except Exception as e:
             logger.error(f"Error en ReAct_node: \n {e}")
             raise ValueError(f"Error: \n {e}")
@@ -115,7 +123,7 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
                 )
                 educhat_session.add(record)
                 educhat_session.commit()
-                logger.info(f"UsageMetadata guardado: message_id={state.get('current_message_id')}, task=EDUBOT")
+                _log(chat_id, f"UsageMetadata guardado: message_id={state.get('current_message_id')}, task=EDUBOT")
             except Exception as e:
                 logger.error(f"Error guardando UsageMetadata: {e}")
                 educhat_session.rollback()
@@ -125,22 +133,25 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
     
     def tool_node_wrapper(state : State) -> State:
         # logger.info("=== tool_node_wrapper")
-        logger.info("---"*4 + " tool_node_wrapper\n")
+        chat_id = state.get("current_chat_id")
+        _log(chat_id, "---"*4 + " tool_node_wrapper")
         current_message_id = state.get("current_message_id")
         lightrag_toolkit.set_message_id(current_message_id)
+        lightrag_toolkit.set_chat_id(chat_id)
         retrive_toolkit.set_message_id(current_message_id)
+        retrive_toolkit.set_chat_id(chat_id)
         tool_responses_ditc = tool_invoker.invoke(state) # {"messages" : [ToolMessage, ToolMessage ...]}
-        logger.info("tools invocadas")
-        
+        _log(chat_id, "tools invocadas")
+
         tool_response : List[ToolMessage] = tool_responses_ditc["messages"]
-        logger.info("set_tool_response")
+        _log(chat_id, "set_tool_response")
         set_tool_dict = set_tool_response(tool_responses=tool_response, tool_name=SUBAGENT_NAME)
         if set_tool_dict.get("tool_message_subagent") is None:
-            logger.info("Caso 1. No se invoco ningun subagente")
+            _log(chat_id, "Caso 1. No se invoco ningun subagente")
             for msg in tool_response:
-                logger.info(f"{msg.pretty_repr()}")
+                _log(chat_id, msg.pretty_repr())
             return tool_responses_ditc
-        
+
         tool_message_subagent = set_tool_dict.get("tool_message_subagent")
         tool_message_list = set_tool_dict.get("tool_message_list")
         if tool_message_subagent.content == "ERROR":
@@ -148,31 +159,32 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
             tool_message_subagent.content = "Error: No puedes llamar al subagente mas de 1 vez al mismo tiempo. Invoca al subagente con un sola tarea a la vez"
             result = tool_message_list + [tool_message_subagent]
             for msg in result:
-                logger.info(f"{msg.pretty_repr()}")
+                _log(chat_id, msg.pretty_repr())
             return {"messages":result}
-        
+
 
         originabot_agent_hystory = state["originabot_agent_hystory"]
         originabot_agent_hystory.append(HumanMessage(content=tool_message_subagent.content))
-        logger.info("invocando al subagente")
-        subagent_response = originabotdb_subagent.invoke({"messages":originabot_agent_hystory, "current_message_id":state.get("current_message_id")})
+        _log(chat_id, "invocando al subagente")
+        subagent_response = originabotdb_subagent.invoke({"messages":originabot_agent_hystory, "current_message_id":state.get("current_message_id"), "current_chat_id":state.get("current_chat_id")})
         originabot_agent_hystory = subagent_response["messages"]
         ai_message : AIMessage = subagent_response["messages"][-1]
         tool_message_subagent.content = ai_message.content
         result = tool_message_list + [tool_message_subagent]
         for msg in result:
-                logger.info(f"{msg.pretty_repr()}")
+            _log(chat_id, msg.pretty_repr())
         return {"messages":result, "originabot_agent_hystory":originabot_agent_hystory}
     
 
     def should_end(state : State) -> Literal[END, "tool_node_wrapper"]: # type: ignore
-        logger.info("---"*4 + " tool_node_wrapper")
+        chat_id = state.get("current_chat_id")
+        _log(chat_id, "---"*4 + " should_end")
         # logger.info("=== should_end")
         last_ai_message : AIMessage = state["messages"][-1]
         if not last_ai_message.tool_calls:
-            logger.info("END" + "\n"*5)
+            _log(chat_id, "END")
             return END
-        logger.info("tool_node_wrapper" + "\n"*5)
+        _log(chat_id, "tool_node_wrapper")
         return "tool_node_wrapper"
     
 

@@ -9,7 +9,7 @@ from typing import List
 
 import asyncio
 
-from src.chatedubot_models import UsageMetadata as UsageMetadataRecord, MetaDataTask
+from src.chatedubot_models import UsageMetadata as UsageMetadataRecord, MetaDataTask, EduChatLogs
 from src.logging_config import get_logger
 logger = get_logger(module_name="regular_search_toolkit", DIR="Agent")
 
@@ -21,9 +21,19 @@ class RetrivePartialResponsesToolKit:
         self.session = session
         self.educhat_session = educhat_session
         self._message_id: int | None = None
+        self._chat_id: int | None = None
 
     def set_message_id(self, message_id: int | None) -> None:
         self._message_id = message_id
+
+    def set_chat_id(self, chat_id: int | None) -> None:
+        self._chat_id = chat_id
+
+    def _log(self, msg: str) -> None:
+        logger.info(msg)
+        if self._chat_id is not None:
+            self.educhat_session.add(EduChatLogs(chat_id=self._chat_id, log=msg))
+            self.educhat_session.commit()
 
     def _get_model_name(self) -> str | None:
         return getattr(self.llm, "model_name", None) or getattr(self.llm, "model", None)
@@ -39,7 +49,7 @@ class RetrivePartialResponsesToolKit:
             )
             self.educhat_session.add(record)
             self.educhat_session.commit()
-            logger.info(f"UsageMetadata guardado: message_id={self._message_id}, task=SEARCH_BY_KEYWORD")
+            self._log(f"UsageMetadata guardado: message_id={self._message_id}, task=SEARCH_BY_KEYWORD")
         except Exception as e:
             logger.error(f"Error guardando UsageMetadata: {e}")
             self.educhat_session.rollback()

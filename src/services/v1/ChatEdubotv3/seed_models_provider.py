@@ -37,4 +37,6 @@ if __name__ == "__main__":
 
 """
 python3 -m src.services.v1.ChatEdubotv3.seed_models_provider
+
+
 """
