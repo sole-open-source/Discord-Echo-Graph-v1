@@ -67,6 +67,9 @@ def format_langchain_messages(session : Session, messages : List[BaseMessage], u
 
 
 
+
+
+
 def run_chat(
         session : Session, 
         user_id : int, 
@@ -74,7 +77,7 @@ def run_chat(
         human_message : str, 
         chat_agent : CompiledStateGraph, 
         edubot_system_message : str, 
-        originabot_system_message : str
+        subagents_system_message : Dict[str, str] # Diccionario con key nombre del estado que aparece en Edubot/graph value system message
 ):
     
     _log(session, chat_id, "guardando human_message en la tabla de chat principal")
@@ -98,43 +101,61 @@ def run_chat(
     _log(session, chat_id, "Historial de mensajes conseguido")
 
 
-    # =========================
-    # =========================
-    record = session.query(models.EduBotStates).filter_by(chat_id=chat_id).first() # record.state debe ser una lista de jsons
-    if record is None:
-        _log(session, chat_id, "No hay historial del subagente")
-        originabot_agent_hystory = set_json_to_langchain_format([{"role": "System", "content": originabot_system_message}])
-    else:
-        _log(session, chat_id, f"recuperando memorio del subagente. Hay {len(record.state)}")
-        originabot_agent_hystory = set_json_to_langchain_format(record.state)
-    # =========================
-    # =========================
+    records_educhat_state = session.query(models.EduBotStates).filter(
+        models.EduBotStates.state_name.in_(list(subagents_system_message.keys()))
+    ).all()   # Aqui espero que hayan n registros correspondientes a la cantidad de subagentes
+            
+    
+    # Como no sabemos si el agente invoko al subagente siempre inicialisamos el historial con el sytem prompt
+    current_state = [
+        (
+            name, 
+            set_json_to_langchain_format([{"role": "System", "content": subagents_system_message[name]}])
+        ) 
+        for name in subagents_system_message
+    ]
 
+    current_state = dict(current_state)
+
+    # En caso de que el agente si haya invocado al subagente, actualizamos el historial
+    for record in records_educhat_state:
+        name = record.state_name
+        json = record.state
+        current_state[name] = set_json_to_langchain_format(json)
+    
 
     messages = set_langchain_format(message_history_records=message_history_records, system_message=edubot_system_message)
     _log(session, chat_id, "Historial de mensajes en formato de langchain conseguido")
 
+    current_state["messages"] = messages
 
-    agent_response = chat_agent.invoke({"messages":messages, "originabot_agent_hystory":originabot_agent_hystory, "current_message_id":current_message_id, "current_chat_id":chat_id})
+
+    # Ahora invocamos
+    agent_response = chat_agent.invoke(current_state)
+
+
+    for key in agent_response:
+        if key in list(subagents_system_message.keys()):
+            agent_history = agent_response[key]
+            state = set_langchain_format_to_json(agent_history)
+            state_record = session.query(models.EduBotStates).filter(
+                models.EduBotStates.chat_id == chat_id,
+                models.EduBotStates.state_name == key
+            ).first()
+            
+            if state_record is None:
+                r = models.EduBotStates(chat_id=chat_id, state=state, state_name=key)
+                session.add(r)
+            else:
+                state_record.state = state
+                session.add(state_record)
+
+
+
+
     messages = agent_response["messages"]
-
-
-    # =========================
-    # =========================
-    originabot_agent_hystory = agent_response["originabot_agent_hystory"]
-    if originabot_agent_hystory:
-        state = set_langchain_format_to_json(originabot_agent_hystory)
-        record = models.EduBotStates(chat_id=chat_id, state=state)
-        session.add(record)
-    # =========================
-    # =========================
-
-
-    _log(session, chat_id, "Respuestas del agente conseguidas")
-
     chat_response = format_langchain_messages(session=session, messages=messages, user_id=user_id, chat_id=chat_id)
     _log(session, chat_id, "los mensajes de langchain se han formateado a json")
-
 
     _log(session, chat_id, "guardando en la base de datos")
     session.close()
@@ -164,6 +185,7 @@ if __name__ == "__main__":
 
     from .Edubot.prompts import EDUBOT_SYSTEM_PROMPT_1
     from .OriginabotdbAgent.prompts import DB_AGENT_SYSTEM_PROMPT_3
+    from .Edubot import conf
     
 
     root_dir = Path(__file__).resolve().parent
@@ -201,7 +223,11 @@ if __name__ == "__main__":
 
     originabotdb_subagent = create_chat_agent(llm=llm, engine=originabotdb_engine, originabotdb_json=originabotdb_json, educhat_session=agent_educhat_session)
 
-    edubot = create_chat_edubot(llm=llm, originabotdb_subagent=originabotdb_subagent, semaphore=semaphore, session=discord_session, educhat_session=agent_educhat_session)
+    subagent_dict = {
+        conf.ORIGINABOT_SUBAGENT_NAME : {"state_name":"originabot_agent_history", "subagent":originabotdb_subagent}
+    }
+
+    edubot = create_chat_edubot(llm=llm, subagent_dict=subagent_dict, semaphore=semaphore, session=discord_session, educhat_session=agent_educhat_session)
 
     system_edubot = EDUBOT_SYSTEM_PROMPT_1
 
@@ -213,12 +239,12 @@ if __name__ == "__main__":
 
     human_message = "Hola"
     human_message = "cuantaos registros tiene la tabla minifarm_projectprice de originabotdb ?"
-    human_message = "listo, ahora me gustaria saber quien es Camilo Rivera en Solenium y Unergy"
+    # human_message = "listo, ahora me gustaria saber quien es Camilo Rivera en Solenium y Unergy"
 
 
+    subagents_system_message = {"originabot_agent_history":originabot_system_message}
 
-
-    run_chat(session=session, user_id=user_id, chat_id=chat_id, human_message=human_message, chat_agent=edubot, edubot_system_message=system_edubot, originabot_system_message=originabot_system_message)
+    run_chat(session=session, user_id=user_id, chat_id=chat_id, human_message=human_message, chat_agent=edubot, edubot_system_message=system_edubot, subagents_system_message=subagents_system_message)
 
 
 """

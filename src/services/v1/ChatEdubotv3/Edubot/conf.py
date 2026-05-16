@@ -1,4 +1,6 @@
 SUBAGENT_NAME = "invoke_Originabotdb_subagent"
+ORIGINABOT_SUBAGENT_NAME = "invoke_Originabotdb_subagent"
+REQUESTDB_SUBAGENT_NAME = "invoker_Requestdb_subagent"
 
 # ============================================
 # Lightrag tool

@@ -10,7 +10,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.graph import add_messages, END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from typing import TypedDict, List, Annotated, Literal
+from typing import TypedDict, List, Annotated, Literal, Dict
 from sqlalchemy.orm import Session
 import asyncio
 
@@ -20,29 +20,47 @@ from src.chatedubot_models import UsageMetadata as UsageMetadataRecord, MetaData
 logger = get_logger(module_name="chat_edubot", DIR="Agent")
 
 
-class SetToolResponse(TypedDict):
-    tool_message_list : List[ToolMessage]
-    tool_message_subagent : ToolMessage
+class CustomDict(TypedDict):
+    subagent_name : str
+    subagent : CompiledStateGraph 
+    state_name : str
 
 
 
-def set_tool_response(tool_responses : List[ToolMessage], tool_name : str) -> SetToolResponse:
-    tool_message_list = []
-    tool_message_subagent = None
-    N = 0
+class SubAgentToolMessageDict(TypedDict):
+    calls : int
+    tool_message : ToolMessage
+    subagent : CompiledStateGraph
+    subagent_name : str
+    state_name : str
+
+
+class StructureToolMessage(TypedDict):
+    regular_tool_response : List[ToolMessage]
+    subagent_tool_response : Dict[str, SubAgentToolMessageDict]
+    
+
+
+def structure_tool_message(tool_responses : List[ToolMessage], subagent_dict : Dict[str, CustomDict]) -> StructureToolMessage:
+    """
+    Nota, aqui las keys de subagent_dict deben coincidir con los nombres de las tools que activan la invocacion del agente
+
+    """
+
+    regular_tool_response = []
+    subagent_tool_response = {}
     for msg in tool_responses:
-        if msg.name == tool_name:
-            N += 1
-            tool_message_subagent = msg
+        if msg.name in subagent_dict:
+            if msg.name not in subagent_tool_response:
+                subagent_tool_response[msg.name] = {"calls":1, "tool_message":msg, "subagent":subagent_dict[msg.name]["subagent"], "subagent_name":subagent_dict[msg.name]["subagent_name"], "state_name":subagent_dict[msg.name]["state_name"]}
+            else:
+                x = subagent_tool_response[msg.name]
+                x["calls"] += 1
         else:
-            tool_message_list.append(msg)
-    logger.info(f"Se ha llamado {N} veces al subagente")
-    if N < 2:
-        return {"tool_message_list":tool_message_list, "tool_message_subagent":tool_message_subagent}
-    logger.error(f"tool_node_wrapper: se ha llamada un subajente 2  o mas veces a la vez")
-    tool_message_subagent.content = "ERROR"
-    return {"tool_message_list":tool_message_list, "tool_message_subagent":tool_message_subagent}
-        
+            regular_tool_response.append(msg)
+
+    return {"regular_tool_response":regular_tool_response, "subagent_tool_response":subagent_tool_response}
+
 
     
 
@@ -54,7 +72,7 @@ def set_tool_response(tool_responses : List[ToolMessage], tool_name : str) -> Se
 
 
 
-def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStateGraph, session : Session, educhat_session : Session, semaphore : asyncio.Semaphore) -> CompiledStateGraph:
+def create_chat_edubot(llm : BaseChatModel, subagent_dict : Dict[str, CustomDict], session : Session, educhat_session : Session, semaphore : asyncio.Semaphore) -> CompiledStateGraph:
 
     # ==========================
     # Tools
@@ -83,7 +101,7 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
     class State(TypedDict):
         messages : Annotated[List[BaseMessage], add_messages]
         # originabot_agent_name : str | None
-        originabot_agent_hystory : List[BaseMessage]
+        originabot_agent_history : List[BaseMessage]
         current_message_id : int | None
         current_chat_id : int | None
 
@@ -131,6 +149,7 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
         return {"messages":ai_message}
         
     
+
     def tool_node_wrapper(state : State) -> State:
         # logger.info("=== tool_node_wrapper")
         chat_id = state.get("current_chat_id")
@@ -144,37 +163,56 @@ def create_chat_edubot(llm : BaseChatModel, originabotdb_subagent : CompiledStat
         _log(chat_id, "tools invocadas")
 
         tool_response : List[ToolMessage] = tool_responses_ditc["messages"]
-        _log(chat_id, "set_tool_response")
-        set_tool_dict = set_tool_response(tool_responses=tool_response, tool_name=SUBAGENT_NAME)
-        if set_tool_dict.get("tool_message_subagent") is None:
+        _log(chat_id, "structure_tool_message")
+        structure_dict = structure_tool_message(tool_responses=tool_response, subagent_dict=subagent_dict)
+
+        regular_tool_response = structure_dict["regular_tool_response"]
+        subagent_tool_response = structure_dict["subagent_tool_response"]
+        
+        if not subagent_tool_response:
             _log(chat_id, "Caso 1. No se invoco ningun subagente")
             for msg in tool_response:
                 _log(chat_id, msg.pretty_repr())
-            return tool_responses_ditc
+            return {"messages":regular_tool_response}
+        
+        result = []
+        response = {"messages":None}
+        for key in subagent_tool_response:
+            data = subagent_tool_response[key]
+            calls = data["calls"]
+            if calls > 1:
+                _log(chat_id, f"Caso 2. Error no puedes invocar a subagente: {key} mas de 1 vez a la vez")
+                tool_message = data["tool_message"].content = f"Erros, no puedes invocar el subagente {key} mas de una vez a la vez"
+                result.append(tool_message)
+            else:
+                _log(chat_id, f"Caso 3. invocando al subagente {key}")
+                tool_message = data["tool_message"]
+                to_do = tool_message.content
+                state_name = data["state_name"]
+                subagent_history : List[BaseMessage] = state[state_name]
+                subagent_history.append(HumanMessage(content=to_do))
+                
+                subagent = data["subagent"]
+                subagent_response = subagent.invoke(subagent_history)
+                subagent_history = subagent_response["messages"]
 
-        tool_message_subagent = set_tool_dict.get("tool_message_subagent")
-        tool_message_list = set_tool_dict.get("tool_message_list")
-        if tool_message_subagent.content == "ERROR":
-            logger.error("se ha invocado algun subagente mas de una vez a la vez")
-            tool_message_subagent.content = "Error: No puedes llamar al subagente mas de 1 vez al mismo tiempo. Invoca al subagente con un sola tarea a la vez"
-            result = tool_message_list + [tool_message_subagent]
-            for msg in result:
-                _log(chat_id, msg.pretty_repr())
-            return {"messages":result}
-
-
-        originabot_agent_hystory = state["originabot_agent_hystory"]
-        originabot_agent_hystory.append(HumanMessage(content=tool_message_subagent.content))
-        _log(chat_id, "invocando al subagente")
-        subagent_response = originabotdb_subagent.invoke({"messages":originabot_agent_hystory, "current_message_id":state.get("current_message_id"), "current_chat_id":state.get("current_chat_id")})
-        originabot_agent_hystory = subagent_response["messages"]
-        ai_message : AIMessage = subagent_response["messages"][-1]
-        tool_message_subagent.content = ai_message.content
-        result = tool_message_list + [tool_message_subagent]
-        for msg in result:
+                ai_message : AIMessage = subagent_response["messages"][-1]
+                tool_message.content = ai_message.content
+                result.append(tool_message)
+                response[state_name] = subagent_history
+            
+        final_tool_response = regular_tool_response + result
+        response["messages"] = final_tool_response
+        for msg in final_tool_response:
             _log(chat_id, msg.pretty_repr())
-        return {"messages":result, "originabot_agent_hystory":originabot_agent_hystory}
-    
+
+        return response
+
+            
+
+        
+        
+
 
     def should_end(state : State) -> Literal[END, "tool_node_wrapper"]: # type: ignore
         chat_id = state.get("current_chat_id")
@@ -224,6 +262,8 @@ if __name__ == "__main__":
     
     from pathlib import Path
 
+    import conf
+
     from src.logging_config import setup_base_logging
     setup_base_logging()
 
@@ -260,6 +300,10 @@ if __name__ == "__main__":
 
     originabot_agent = create_chat_agent(llm=llm, engine=engine, originabotdb_json=originabotdb_json, educhat_session=educhat_session_sub)
 
+    subagent_dict = {
+        conf.ORIGINABOT_SUBAGENT_NAME : {"state_name":"originabot_agent_history", "subagent":originabot_agent}
+    }
+
     semaphore = asyncio.Semaphore(3)
 
     discord_engine = create_engine(settings.DB_DISCORD_CONN_STRING)
@@ -270,7 +314,7 @@ if __name__ == "__main__":
     EduchatSession = sessionmaker(bind=educhat_engine)
     educhat_session = EduchatSession()
 
-    edubot = create_chat_edubot(llm=llm, originabotdb_subagent=originabot_agent, semaphore=semaphore, session=session, educhat_session=educhat_session)
+    edubot = create_chat_edubot(llm=llm, subagent_dict=subagent_dict, semaphore=semaphore, session=session, educhat_session=educhat_session)
     
 
     messages = [SystemMessage(content=EDUBOT_SYSTEM_PROMPT_1)]
@@ -286,9 +330,9 @@ if __name__ == "__main__":
             break
         human_message = HumanMessage(content=human_message)
         messages.append(human_message)
-        response = edubot.invoke({"messages":messages, "originabot_agent_hystory":originabot_agent_hystory})
+        response = edubot.invoke({"messages":messages, "originabot_agent_history":originabot_agent_hystory})
         messages = response["messages"]
-        originabot_agent_hystory = response["originabot_agent_hystory"]
+        originabot_agent_hystory = response["originabot_agent_history"]
         print("\n"*10)
         print(type(originabot_agent_hystory))
         print(len(originabot_agent_hystory))
