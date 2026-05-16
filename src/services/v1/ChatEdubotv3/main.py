@@ -43,7 +43,7 @@ _discord_engine = create_engine(settings.DB_DISCORD_CONN_STRING)
 _DiscordSession = sessionmaker(bind=_discord_engine)
 
 _originabotdb_engine = create_engine(
-    f"postgresql+psycopg2://{settings.ORIGINABOT_NAME}:{settings.ORIGINABOT_PASS}"
+    f"postgresql+psycopg2://{settings.ORIGINABOT_USER}:{settings.ORIGINABOT_PASS}"
     f"@{settings.ORIGINABOT_HOST}:{settings.ORIGINABOT_PORT}/{settings.ORIGINABOT_NAME}"
 )
 
@@ -315,7 +315,8 @@ async def on_message(message: discord.Message):
 
 
 if __name__ == "__main__":
-    bot.run(settings.DULCINEA_DISCORD_BOT_TOKEN)
+    # bot.run(settings.DULCINEA_DISCORD_BOT_TOKEN)
+    bot.run(settings.DISCORD_BOT_TOKEN)
 
 
 """

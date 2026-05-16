@@ -157,11 +157,10 @@ def save_chunked_messages_by_channel(session : Session, channel_id : int, summar
                 end_time=summ_dict.get("summary_end"),
                 number_messages=summ_dict.get("messages_count"),
                 summary=None,
-                key_words=None,
                 #status=None,
             )
             session.add(record)
-             
+
         session.commit()
         print(f"[save] ✓ {len(summary_list)} chunks insertados")
         return
@@ -184,11 +183,10 @@ def save_chunked_messages_by_channel(session : Session, channel_id : int, summar
                 end_time=summ_dict.get("summary_end"),
                 number_messages=summ_dict.get("messages_count"),
                 summary=None,
-                key_words=None,
                 #status=None,
             )
             session.add(record)
-            
+
         session.commit()
         print(f"[save] ✓ {len(summary_list)} chunks insertados")
         return
@@ -223,7 +221,6 @@ def save_chunked_messages_by_channel(session : Session, channel_id : int, summar
                 end_time=summ_dict.get("summary_end"),
                 number_messages=summ_dict.get("messages_count"),
                 summary=None,
-                key_words=None
             )
             session.add(record)
             
