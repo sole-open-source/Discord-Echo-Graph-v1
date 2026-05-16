@@ -21,8 +21,7 @@ logger = get_logger(module_name="chat_edubot", DIR="Agent")
 
 
 class CustomDict(TypedDict):
-    subagent_name : str
-    subagent : CompiledStateGraph 
+    subagent : CompiledStateGraph
     state_name : str
 
 
@@ -31,7 +30,6 @@ class SubAgentToolMessageDict(TypedDict):
     calls : int
     tool_message : ToolMessage
     subagent : CompiledStateGraph
-    subagent_name : str
     state_name : str
 
 
@@ -52,7 +50,7 @@ def structure_tool_message(tool_responses : List[ToolMessage], subagent_dict : D
     for msg in tool_responses:
         if msg.name in subagent_dict:
             if msg.name not in subagent_tool_response:
-                subagent_tool_response[msg.name] = {"calls":1, "tool_message":msg, "subagent":subagent_dict[msg.name]["subagent"], "subagent_name":subagent_dict[msg.name]["subagent_name"], "state_name":subagent_dict[msg.name]["state_name"]}
+                subagent_tool_response[msg.name] = {"calls":1, "tool_message":msg, "subagent":subagent_dict[msg.name]["subagent"], "state_name":subagent_dict[msg.name]["state_name"]}
             else:
                 x = subagent_tool_response[msg.name]
                 x["calls"] += 1
@@ -193,7 +191,7 @@ def create_chat_edubot(llm : BaseChatModel, subagent_dict : Dict[str, CustomDict
                 subagent_history.append(HumanMessage(content=to_do))
                 
                 subagent = data["subagent"]
-                subagent_response = subagent.invoke(subagent_history)
+                subagent_response = subagent.invoke({"messages": subagent_history})
                 subagent_history = subagent_response["messages"]
 
                 ai_message : AIMessage = subagent_response["messages"][-1]
@@ -349,6 +347,5 @@ if __name__ == "__main__":
 python3 -m src.services.v1.ChatEdubotv3.Edubot.graph
 
 
-minifarm_projectprice
 
 """

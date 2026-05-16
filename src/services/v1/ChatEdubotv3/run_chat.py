@@ -239,7 +239,7 @@ if __name__ == "__main__":
 
     human_message = "Hola"
     human_message = "cuantaos registros tiene la tabla minifarm_projectprice de originabotdb ?"
-    # human_message = "listo, ahora me gustaria saber quien es Camilo Rivera en Solenium y Unergy"
+    human_message = "listo, ahora me gustaria saber quien es Camilo Rivera en Solenium y Unergy"
 
 
     subagents_system_message = {"originabot_agent_history":originabot_system_message}

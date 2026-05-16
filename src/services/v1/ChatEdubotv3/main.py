@@ -13,6 +13,7 @@ from src import chatedubot_models as model
 from .run_chat import run_chat
 from .Edubot.graph import create_chat_edubot
 from .Edubot.prompts import EDUBOT_SYSTEM_PROMPT_1
+from .Edubot import conf
 from .OriginabotdbAgent.graph import create_chat_agent
 from .OriginabotdbAgent.prompts import DB_AGENT_SYSTEM_PROMPT_3
 from src.logging_config import get_logger
@@ -73,9 +74,13 @@ _originabotdb_subagent = create_chat_agent(
     educhat_session=_agent_educhat_session,
 )
 
+_subagent_dict = {
+    conf.ORIGINABOT_SUBAGENT_NAME: {"state_name": "originabot_agent_history", "subagent": _originabotdb_subagent}
+}
+
 _chat_agent = create_chat_edubot(
     llm=LLM,
-    originabotdb_subagent=_originabotdb_subagent,
+    subagent_dict=_subagent_dict,
     session=_discord_session,
     educhat_session=_agent_educhat_session,
     semaphore=_semaphore,
@@ -210,6 +215,12 @@ async def start_chat(ctx: commands.Context):
     try:
         user_db_id = _get_or_create_user(session, ctx.author.id, str(ctx.author))
         chat_id = _create_chat(session, user_db_id)
+    except Exception as e:
+        session.rollback()
+        session.close()
+        logger.error(f"Error creando usuario/chat: {e}")
+        await ctx.reply("Ocurrió un error al iniciar la sesión. Intenta de nuevo.")
+        return
     finally:
         session.close()
 
@@ -278,7 +289,7 @@ async def on_message(message: discord.Message):
                             human_message=human_message,
                             chat_agent=_chat_agent,
                             edubot_system_message=_EDUBOT_SYSTEM_MESSAGE,
-                            originabot_system_message=_ORIGINABOT_SYSTEM_MESSAGE,
+                            subagents_system_message={"originabot_agent_history": _ORIGINABOT_SYSTEM_MESSAGE},
                         ),
                     )
                     break
